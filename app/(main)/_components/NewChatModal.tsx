@@ -9,6 +9,7 @@ import {
 } from "@/redux/features/chatSlice";
 import { searchUsers } from "@/redux/features/userSlice";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 interface NewChatModalProps {
@@ -124,8 +125,19 @@ export default function NewChatModal({
                 className="flex items-center justify-between rounded-2xl bg-[#2b2f46] p-4"
               >
                 <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-xl font-bold text-white">
-                    {user.name.charAt(0)}
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 font-bold text-white">
+                    {user.avatar ? (
+                      <Image
+                        src={user.avatar}
+                        alt={user.name}
+                        width={44}
+                        height={44}
+                        unoptimized
+                        className="h-full w-full rounded-full object-cover"
+                      />
+                    ) : (
+                      user.name.charAt(0)
+                    )}
                   </div>
 
                   <div>

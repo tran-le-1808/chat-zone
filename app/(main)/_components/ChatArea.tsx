@@ -6,6 +6,13 @@ import {
   sendMessage,
 } from "@/redux/features/chatSlice";
 
+import {
+  AIMessage,
+  addAIMessage,
+  loadMoreAIMessages,
+  sendAIMessage,
+} from "@/redux/features/aiSlice";
+
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 
 import { socket } from "@/lib/socket";
@@ -14,14 +21,15 @@ import Image from "next/image";
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 
-import { Message, MessageType } from "@/types/chat";
+import { Attachment, Message, MessageType } from "@/types/chat";
 import ImagePreviewModal from "./ImagePreviewModal";
 
 interface ChatAreaProps {
-  messages: Message[];
+  messages: AIMessage[] | Message[];
   hasMoreMessages: boolean;
   nextCursor: string | null;
   loadingMoreMessages: boolean;
+  isAI: boolean;
 }
 
 export default function ChatArea({
@@ -29,61 +37,65 @@ export default function ChatArea({
   hasMoreMessages,
   nextCursor,
   loadingMoreMessages,
+  isAI,
 }: ChatAreaProps) {
   const dispatch = useAppDispatch();
 
+  // Redux Normal Chat State
   const {
     selectedConversation,
-
     selectedUser,
-
-    sending,
+    sending: chatSending,
   } = useAppSelector((state) => state.chat);
 
-  const { user } = useAppSelector((state) => state.auth);
+  // Redux AI State
+  const { selectedConversation: selectedAiConversation, sending: aiSending } =
+    useAppSelector((state) => state.ai);
 
+  const { user } = useAppSelector((state) => state.auth);
   const { onlineUsers } = useAppSelector((state) => state.users);
+
+  const activeSending = isAI ? aiSending : chatSending;
+  const activeConversationId = isAI
+    ? selectedAiConversation?._id
+    : selectedConversation?._id;
 
   const isOnline = onlineUsers.includes(selectedUser?._id || "");
 
   const [text, setText] = useState("");
-
   const [previewOpen, setPreviewOpen] = useState(false);
-
   const [previewImages, setPreviewImages] = useState<string[]>([]);
-
   const [previewIndex, setPreviewIndex] = useState(0);
 
   const [images, setImages] = useState<File[]>([]);
-
   const [videos, setVideos] = useState<File[]>([]);
-
   const [files, setFiles] = useState<File[]>([]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldKeepScrollPositionRef = useRef(false);
 
+  // SOCKET: Join conversation (Only for user-to-user chat)
   useEffect(() => {
-    if (!selectedConversation?._id) return;
+    if (isAI || !selectedConversation?._id) return;
 
     socket.emit("joinConversation", selectedConversation._id);
-  }, [selectedConversation?._id]);
+  }, [isAI, selectedConversation?._id]);
 
   useEffect(() => {
-    socket.on("newMessage", (message) => {
-      if (message.senderId === user?._id) {
-        return;
-      }
+    if (isAI) return;
 
+    socket.on("newMessage", (message) => {
+      if (message.senderId === user?._id) return;
       dispatch(addMessage(message));
     });
 
     return () => {
       socket.off("newMessage");
     };
-  }, [dispatch, user?._id]);
+  }, [isAI, dispatch, user?._id]);
 
+  // SCROLL TO BOTTOM
   useEffect(() => {
     if (!messages.length) return;
 
@@ -98,12 +110,13 @@ export default function ChatArea({
     });
   }, [messages]);
 
+  // LOAD MORE MESSAGES
   const handleLoadMore = async () => {
     const container = messagesContainerRef.current;
 
     if (
       !container ||
-      !selectedConversation?._id ||
+      !activeConversationId ||
       !hasMoreMessages ||
       !nextCursor ||
       loadingMoreMessages
@@ -116,16 +129,24 @@ export default function ChatArea({
 
     shouldKeepScrollPositionRef.current = true;
 
-    await dispatch(
-      loadMoreMessages({
-        conversationId: selectedConversation._id,
-        before: nextCursor,
-      }),
-    );
+    if (isAI) {
+      await dispatch(
+        loadMoreAIMessages({
+          conversationId: activeConversationId,
+          before: nextCursor,
+        }),
+      );
+    } else {
+      await dispatch(
+        loadMoreMessages({
+          conversationId: activeConversationId,
+          before: nextCursor,
+        }),
+      );
+    }
 
     requestAnimationFrame(() => {
       const newScrollHeight = container.scrollHeight;
-
       container.scrollTop =
         newScrollHeight - previousScrollHeight + previousScrollTop;
     });
@@ -133,33 +154,31 @@ export default function ChatArea({
 
   const handleScroll = () => {
     const container = messagesContainerRef.current;
-
     if (!container) return;
 
     const isNearTop = container.scrollTop <= 100;
-
     if (isNearTop && hasMoreMessages && !loadingMoreMessages) {
       handleLoadMore();
     }
   };
 
   const onClickImage = (
-    message: Message,
-    attachment: (typeof message.attachments)[0],
+    message: Message | AIMessage,
+    attachment: Attachment,
   ) => {
     const allImages =
       message.attachments
-        ?.filter((item) => item.type.startsWith("image"))
-        .map((item) => `${process.env.NEXT_PUBLIC_API_URL}${item.url}`) || [];
+        ?.filter((item: Attachment) => item.type.startsWith("image"))
+        .map(
+          (item: Attachment) => `${process.env.NEXT_PUBLIC_API_URL}${item.url}`,
+        ) || [];
 
     const clickedIndex = allImages.findIndex(
       (img) => img === `${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`,
     );
 
     setPreviewImages(allImages);
-
     setPreviewIndex(clickedIndex);
-
     setPreviewOpen(true);
   };
 
@@ -167,11 +186,8 @@ export default function ChatArea({
     if (!e.target.files) return;
 
     const selectedFiles = Array.from(e.target.files);
-
     const imageFiles: File[] = [];
-
     const videoFiles: File[] = [];
-
     const normalFiles: File[] = [];
 
     selectedFiles.forEach((file) => {
@@ -185,33 +201,54 @@ export default function ChatArea({
     });
 
     setImages((prev) => [...prev, ...imageFiles]);
-
     setVideos((prev) => [...prev, ...videoFiles]);
-
     setFiles((prev) => [...prev, ...normalFiles]);
   };
 
+  // SEND MESSAGE
   const handleSend = async () => {
     if (!text.trim() && !images.length && !videos.length && !files.length) {
       return;
     }
 
-    if (!selectedConversation || !user?._id) {
+    if (!activeConversationId || !user?._id) {
       return;
     }
 
+    //
+    // AI CHAT FLOW
+    //
+    if (isAI) {
+      try {
+        await dispatch(
+          sendAIMessage({
+            conversationId: activeConversationId,
+            content: text,
+          }),
+        );
+        setText("");
+        setImages([]);
+        setVideos([]);
+        setFiles([]);
+      } catch (error) {
+        console.error("AI Send Error:", error);
+      }
+      return;
+    }
+
+    //
+    // NORMAL CHAT FLOW
+    //
     const formData = new FormData();
-
     formData.append("senderId", user._id);
-
-    formData.append("receiverId", selectedUser?._id || "");
-
-    formData.append("conversationId", selectedConversation._id);
-
+    formData.append("conversationId", activeConversationId);
     formData.append("text", text);
 
-    let type: MessageType = MessageType.TEXT;
+    if (selectedUser?._id) {
+      formData.append("receiverId", selectedUser._id);
+    }
 
+    let type: MessageType = MessageType.TEXT;
     const hasMedia = images.length > 0 || videos.length > 0 || files.length > 0;
 
     if (text.trim() && hasMedia) {
@@ -232,45 +269,47 @@ export default function ChatArea({
 
     try {
       await dispatch(sendMessage(formData));
-
       setText("");
-
       setImages([]);
-
       setVideos([]);
-
       setFiles([]);
     } catch (error) {
-      console.error(error);
+      console.error("Normal Send Error:", error);
     }
   };
 
   return (
     <div className="flex flex-col bg-[#262a40] w-full xl:max-w-[calc(100vw-640px)]">
-      {/* TOP */}
+      {/* TOP HEADER */}
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 md:px-8 md:py-5">
         <div className="flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-r from-cyan-400 to-purple-500 text-lg font-bold text-white">
-            {selectedConversation?.groupName?.charAt(0) || "U"}
+            {isAI ? "🤖" : selectedConversation?.groupName?.charAt(0) || "U"}
           </div>
 
           <div>
             <h2 className="text-lg font-semibold text-white">
-              {selectedConversation?.groupName}
+              {isAI
+                ? selectedAiConversation?.title || "AI Assistant"
+                : selectedConversation?.groupName}
             </h2>
 
             <p
               className={`text-sm ${
-                isOnline ? "text-green-400" : "text-gray-400"
+                isAI
+                  ? "text-cyan-400"
+                  : isOnline
+                    ? "text-green-400"
+                    : "text-gray-400"
               }`}
             >
-              {isOnline ? "Online" : "Offline"}
+              {isAI ? "Always active" : isOnline ? "Online" : "Offline"}
             </p>
           </div>
         </div>
       </div>
 
-      {/* MESSAGES */}
+      {/* MESSAGES LIST */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
@@ -295,57 +334,64 @@ export default function ChatArea({
                 }`}
               >
                 {/* TEXT */}
-                {message.text && <p>{message.text}</p>}
+                {message.text && (
+                  <p className="whitespace-pre-wrap">{message.text}</p>
+                )}
 
                 {/* ATTACHMENTS */}
                 {!!message.attachments?.length && (
                   <div className="gap-2 flex flex-wrap items-center mt-2">
-                    {message.attachments.map((attachment, index) => {
-                      if (attachment.type.startsWith("image")) {
-                        const fileUrl = `${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`;
-                        return (
-                          <div
-                            className="relative h-20 w-20 overflow-hidden rounded-lg"
-                            key={index}
-                          >
-                            <Image
-                              src={fileUrl}
-                              alt={attachment.name}
-                              fill
-                              className="cursor-pointer object-cover shadow hover:opacity-80"
-                              unoptimized
-                              onClick={() => onClickImage(message, attachment)}
-                            />
-                          </div>
-                        );
-                      }
+                    {message.attachments.map(
+                      (attachment: Attachment, index: number) => {
+                        if (attachment.type.startsWith("image")) {
+                          const fileUrl = `${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`;
+                          return (
+                            <div
+                              className="relative h-20 w-20 overflow-hidden rounded-lg"
+                              key={index}
+                            >
+                              <Image
+                                src={fileUrl}
+                                alt={attachment.name || "image"}
+                                fill
+                                className="cursor-pointer object-cover shadow hover:opacity-80"
+                                unoptimized
+                                onClick={() =>
+                                  onClickImage(message, attachment)
+                                }
+                              />
+                            </div>
+                          );
+                        }
 
-                      if (attachment.type.startsWith("video")) {
-                        return (
-                          <video
-                            key={index}
-                            controls
-                            className="max-w-full rounded-2xl hover:opacity-80"
-                          >
-                            <source
-                              src={`${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`}
-                              type={attachment.type}
-                            />
-                          </video>
-                        );
-                      }
+                        if (attachment.type.startsWith("video")) {
+                          return (
+                            <video
+                              key={index}
+                              controls
+                              className="max-w-full rounded-2xl hover:opacity-80"
+                            >
+                              <source
+                                src={`${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`}
+                                type={attachment.type}
+                              />
+                            </video>
+                          );
+                        }
 
-                      return (
-                        <a
-                          key={index}
-                          href={`${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`}
-                          target="_blank"
-                          className=" rounded-xl bg-white/10 p-3 text-sm hover:opacity-80 flex items-center"
-                        >
-                          📄 {attachment.name}
-                        </a>
-                      );
-                    })}
+                        return (
+                          <a
+                            key={index}
+                            href={`${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-xl bg-white/10 p-3 text-sm hover:opacity-80 flex items-center"
+                          >
+                            📄 {attachment.name}
+                          </a>
+                        );
+                      },
+                    )}
                   </div>
                 )}
               </div>
@@ -356,7 +402,7 @@ export default function ChatArea({
         <div ref={bottomRef} />
       </div>
 
-      {/* PREVIEW */}
+      {/* PREVIEW ATTACHMENTS */}
       {!!images.length && (
         <div className="overflow-x-auto px-4 py-3">
           <div className="flex gap-2 w-max">
@@ -424,25 +470,27 @@ export default function ChatArea({
         </div>
       )}
 
-      {/* INPUT */}
+      {/* INPUT CONTROLS */}
       <div className="border-t border-white/10 p-4">
         <div className="flex items-center gap-3">
-          <label className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-2xl bg-[#323751] text-2xl text-white">
-            +
-            <input
-              type="file"
-              multiple
-              hidden
-              onChange={handleSelectFiles}
-              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
-            />
-          </label>
+          {!isAI && (
+            <label className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-2xl bg-[#323751] text-2xl text-white">
+              +
+              <input
+                type="file"
+                multiple
+                hidden
+                onChange={handleSelectFiles}
+                accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+              />
+            </label>
+          )}
 
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (sending) return;
+              if (activeSending) return;
               if (
                 e.key === "Enter" &&
                 !e.shiftKey &&
@@ -452,19 +500,52 @@ export default function ChatArea({
                 handleSend();
               }
             }}
-            placeholder="Type something..."
+            placeholder={isAI ? "Ask AI anything..." : "Type something..."}
             className="flex-1 rounded-2xl border border-cyan-400 bg-[#2b2f46] px-4 py-3 text-white outline-none"
           />
 
           <button
-            disabled={sending}
+            disabled={activeSending}
             onClick={handleSend}
-            className="rounded-2xl bg-linear-to-r from-cyan-400 to-purple-500 px-5 py-3 text-white disabled:opacity-50"
+            className="flex items-center justify-center rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 p-3.5 text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {sending ? "..." : "Send"}
+            {activeSending ? (
+              /* Icon Loading Spinner khi đang gửi */
+              <svg
+                className="h-5 w-5 animate-spin text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            ) : (
+              /* Icon Paper Plane Send khi ở trạng thái bình thường */
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="h-5 w-5"
+              >
+                <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12L2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
+              </svg>
+            )}
           </button>
         </div>
       </div>
+
       {previewOpen && (
         <ImagePreviewModal
           open={previewOpen}

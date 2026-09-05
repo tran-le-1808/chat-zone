@@ -12,7 +12,10 @@ import {
 } from "@/types/chat";
 
 export interface CreateGroupPayload {
-  formData: FormData;
+  adminId: string;
+  groupName: string;
+  participants: string[];
+  groupAvatar?: string;
 }
 
 interface LoadMoreMessagesPayload {
@@ -96,11 +99,11 @@ export const createGroup = createAsyncThunk<
   {
     rejectValue: string;
   }
->("chat/createGroup", async ({ formData }, thunkAPI) => {
+>("chat/createGroup", async (payload, thunkAPI) => {
   try {
     const response = await API.post<Conversation>(
       "/chat/create-group",
-      formData,
+      payload,
     );
 
     return response.data;
@@ -225,6 +228,38 @@ const chatSlice = createSlice({
   initialState,
 
   reducers: {
+    updateConversationFromSocket: (
+      state,
+      action: PayloadAction<{
+        conversationId: string;
+        lastMessage: string;
+        lastMessageAt: string;
+      }>,
+    ) => {
+      const { conversationId, lastMessage, lastMessageAt } = action.payload;
+      const index = state.conversations.findIndex(
+        (c) => c._id === conversationId,
+      );
+
+      if (index !== -1) {
+        const updatedConv = {
+          ...state.conversations[index],
+          lastMessage,
+          lastMessageAt,
+        };
+        state.conversations.splice(index, 1);
+        state.conversations.unshift(updatedConv);
+      }
+    },
+
+    addConversationFromSocket: (state, action: PayloadAction<Conversation>) => {
+      const exists = state.conversations.some(
+        (c) => c._id === action.payload._id,
+      );
+      if (!exists) {
+        state.conversations.unshift(action.payload);
+      }
+    },
     setSelectedConversation: (
       state,
       action: PayloadAction<Conversation | null>,
@@ -422,6 +457,8 @@ export const {
   addMessage,
   clearMessages,
   resetChatError,
+  updateConversationFromSocket,
+  addConversationFromSocket,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

@@ -57,9 +57,7 @@ export default function Header() {
               {user?.name || "Guest"}
             </p>
 
-            <p className="text-sm text-gray-400">
-              {user?.email || "guest@email.com"}
-            </p>
+            <p className="text-sm text-gray-400">{user?.email || ""}</p>
           </div>
 
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-r from-cyan-400 to-purple-500 text-lg font-bold text-white shadow-lg">

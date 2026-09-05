@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
 
         pathname: "/uploads/**",
       },
+      {
+        protocol: "https",
+        hostname: "i.pravatar.cc",
+      },
     ],
   },
 };
