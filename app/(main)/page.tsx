@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import ChatArea from "./_components/ChatArea";
@@ -29,7 +29,7 @@ import useDebounce from "@/hooks/useDebounce";
 import { socket } from "@/lib/socket"; // Import instance socket từ lib của bạn
 import { Conversation, Message } from "@/types/chat";
 
-export default function Home() {
+function HomeContent() {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -264,5 +264,13 @@ export default function Home() {
         <RightSidebar />
       </div>
     </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeContent />
+    </Suspense>
   );
 }
