@@ -11,16 +11,16 @@ import {
   addAIMessage,
   loadMoreAIMessages,
   sendAIMessage,
+  aiMessageStart,
+  aiMessageChunk,
+  aiMessageComplete,
+  aiMessageError,
 } from "@/redux/features/aiSlice";
 
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
-
 import { socket } from "@/lib/socket";
-
 import Image from "next/image";
-
 import { ChangeEvent, useEffect, useRef, useState } from "react";
-
 import { Attachment, Message, MessageType } from "@/types/chat";
 import ImagePreviewModal from "./ImagePreviewModal";
 
@@ -49,13 +49,18 @@ export default function ChatArea({
   } = useAppSelector((state) => state.chat);
 
   // Redux AI State
-  const { selectedConversation: selectedAiConversation, sending: aiSending } =
-    useAppSelector((state) => state.ai);
+  const {
+    selectedConversation: selectedAiConversation,
+    sending: aiSending,
+    streaming,
+    streamingMessage,
+    streamingConversationId,
+  } = useAppSelector((state) => state.ai);
 
   const { user } = useAppSelector((state) => state.auth);
   const { onlineUsers } = useAppSelector((state) => state.users);
 
-  const activeSending = isAI ? aiSending : chatSending;
+  const activeSending = isAI ? aiSending || streaming : chatSending;
   const activeConversationId = isAI
     ? selectedAiConversation?._id
     : selectedConversation?._id;
@@ -75,29 +80,71 @@ export default function ChatArea({
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldKeepScrollPositionRef = useRef(false);
 
-  // SOCKET: Join conversation (Only for user-to-user chat)
+  // SOCKET: Join conversation (User-to-user)
   useEffect(() => {
     if (isAI || !selectedConversation?._id) return;
-
     socket.emit("joinConversation", selectedConversation._id);
   }, [isAI, selectedConversation?._id]);
 
   useEffect(() => {
     if (isAI) return;
 
-    socket.on("newMessage", (message) => {
+    const handleNewMessage = (message: Message) => {
       if (message.senderId === user?._id) return;
       dispatch(addMessage(message));
-    });
+    };
+
+    socket.on("newMessage", handleNewMessage);
 
     return () => {
-      socket.off("newMessage");
+      socket.off("newMessage", handleNewMessage);
     };
   }, [isAI, dispatch, user?._id]);
 
+  // SOCKET: AI Streaming Listeners
+  useEffect(() => {
+    if (!isAI) return;
+
+    const handleStart = (data: { conversationId: string }) => {
+      dispatch(aiMessageStart(data));
+    };
+
+    const handleChunk = (data: { conversationId: string; chunk: string }) => {
+      dispatch(aiMessageChunk(data));
+    };
+
+    const handleComplete = (data: {
+      conversationId: string;
+      message?: AIMessage;
+    }) => {
+      console.log("🚀 ~ aiMessageComplete received:", data);
+      dispatch(aiMessageComplete(data));
+    };
+
+    const handleError = (data: {
+      conversationId?: string;
+      message: string;
+    }) => {
+      console.error("🚀 ~ aiMessageError received:", data);
+      dispatch(aiMessageError(data));
+    };
+
+    socket.on("aiMessageStart", handleStart);
+    socket.on("aiMessageChunk", handleChunk);
+    socket.on("aiMessageComplete", handleComplete);
+    socket.on("aiMessageError", handleError);
+
+    return () => {
+      socket.off("aiMessageStart", handleStart);
+      socket.off("aiMessageChunk", handleChunk);
+      socket.off("aiMessageComplete", handleComplete);
+      socket.off("aiMessageError", handleError);
+    };
+  }, [isAI, dispatch]);
+
   // SCROLL TO BOTTOM
   useEffect(() => {
-    if (!messages.length) return;
+    if (!messages.length && !streamingMessage) return;
 
     if (shouldKeepScrollPositionRef.current) {
       shouldKeepScrollPositionRef.current = false;
@@ -108,7 +155,7 @@ export default function ChatArea({
       behavior: "auto",
       block: "end",
     });
-  }, [messages]);
+  }, [messages, streamingMessage]);
 
   // LOAD MORE MESSAGES
   const handleLoadMore = async () => {
@@ -207,7 +254,8 @@ export default function ChatArea({
 
   // SEND MESSAGE
   const handleSend = async () => {
-    if (!text.trim() && !images.length && !videos.length && !files.length) {
+    const contentText = text.trim();
+    if (!contentText && !images.length && !videos.length && !files.length) {
       return;
     }
 
@@ -219,19 +267,42 @@ export default function ChatArea({
     // AI CHAT FLOW
     //
     if (isAI) {
-      try {
-        await dispatch(
-          sendAIMessage({
-            conversationId: activeConversationId,
-            content: text,
-          }),
-        );
-        setText("");
-        setImages([]);
-        setVideos([]);
-        setFiles([]);
-      } catch (error) {
-        console.error("AI Send Error:", error);
+      // Clear input form
+      setText("");
+      setImages([]);
+      setVideos([]);
+      setFiles([]);
+
+      // Kiểm tra nếu Socket đang kết nối -> Dùng Streaming qua Socket
+      if (socket.connected) {
+        // 1. Thêm tin nhắn của User vào giao diện UI
+        const userTempMsg: AIMessage = {
+          _id: `temp-user-${Date.now()}`,
+          conversationId: activeConversationId,
+          senderId: user._id,
+          text: contentText,
+          attachments: [],
+          createdAt: new Date().toISOString(),
+        };
+        dispatch(addAIMessage(userTempMsg));
+
+        // 2. Bắn event lên Server Socket
+        socket.emit("aiMessage", {
+          conversationId: activeConversationId,
+          content: contentText,
+        });
+      } else {
+        // Fallback: Nếu Socket không kết nối -> Gọi HTTP API
+        try {
+          await dispatch(
+            sendAIMessage({
+              conversationId: activeConversationId,
+              content: contentText,
+            }),
+          ).unwrap();
+        } catch (error) {
+          console.error("AI Send API Error:", error);
+        }
       }
       return;
     }
@@ -283,7 +354,7 @@ export default function ChatArea({
       {/* TOP HEADER */}
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 md:px-8 md:py-5">
         <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-r from-cyan-400 to-purple-500 text-lg font-bold text-white">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-lg font-bold text-white">
             {isAI ? "🤖" : selectedConversation?.groupName?.charAt(0) || "U"}
           </div>
 
@@ -399,6 +470,18 @@ export default function ChatArea({
           );
         })}
 
+        {/* STREAMING AI MESSAGE */}
+        {isAI && streamingConversationId === activeConversationId && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-3xl bg-[#323751] px-4 py-3 text-white">
+              <p className="whitespace-pre-wrap">
+                {streamingMessage}
+                <span className="inline-block w-2 h-4 ml-1 bg-cyan-400 animate-pulse" />
+              </p>
+            </div>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -510,7 +593,6 @@ export default function ChatArea({
             className="flex items-center justify-center rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 p-3.5 text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {activeSending ? (
-              /* Icon Loading Spinner khi đang gửi */
               <svg
                 className="h-5 w-5 animate-spin text-white"
                 xmlns="http://www.w3.org/2000/svg"
@@ -532,7 +614,6 @@ export default function ChatArea({
                 ></path>
               </svg>
             ) : (
-              /* Icon Paper Plane Send khi ở trạng thái bình thường */
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
