@@ -274,6 +274,7 @@ export default function ChatArea({
       setFiles([]);
 
       // Kiểm tra nếu Socket đang kết nối -> Dùng Streaming qua Socket
+      console.log("🚀 ~ handleSend ~ socket:", socket);
       if (socket.connected) {
         // 1. Thêm tin nhắn của User vào giao diện UI
         const userTempMsg: AIMessage = {
