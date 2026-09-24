@@ -13,10 +13,30 @@ export const socket = io(`${process.env.NEXT_PUBLIC_API_URL}`, {
   autoConnect: true,
   transports: ["websocket"],
   withCredentials: true,
+
   auth: (cb) => {
-    // Hàm này chạy động mỗi lần socket kết nối/kết nối lại để lấy token mới nhất
+    const token = getAccessToken();
+
+    console.log("[AI Socket] Getting token:", !!token);
+
     cb({
-      token: `Bearer ${getAccessToken()}`,
+      token: token ? `Bearer ${token}` : "",
     });
   },
+});
+
+socket.on("connect", () => {
+  console.log("[AI Socket] CONNECTED:", socket.id);
+});
+
+socket.on("connect_error", (error) => {
+  console.error("[AI Socket] CONNECT ERROR:", error.message);
+});
+
+socket.on("disconnect", (reason) => {
+  console.warn("[AI Socket] DISCONNECTED:", reason);
+});
+
+socket.on("error", (error) => {
+  console.error("[AI Socket] ERROR:", error);
 });
