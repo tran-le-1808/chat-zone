@@ -188,7 +188,7 @@ export default function XocDiaModal() {
               animationDelay: "1.2s",
             }}
           >
-            {whites} trắng → {answer === "odd" ? "LẺ" : "CHẴN"}
+            {answer === "odd" ? "LẺ" : "CHẴN"}
           </div>
         )}
       </ToyPanel>

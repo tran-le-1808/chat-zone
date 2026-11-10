@@ -134,3 +134,62 @@ export interface GameCard {
   value?: number;
   targetTileType?: string;
 }
+
+// =====================================================================
+// Kiểu dữ liệu cho bộ engine cũ (_components/game/boardData.ts & gameEngine.ts)
+// Bàn cờ 40 ô kiểu cổ điển, tách biệt với mô hình đang dùng ở GameContext.
+// =====================================================================
+
+export type BoardTileType =
+  | "GO"
+  | "PROPERTY"
+  | "RAILROAD"
+  | "JAIL"
+  | "FREE_PARKING"
+  | "GO_TO_JAIL"
+  | "CHANCE"
+  | "COMMUNITY_CHEST"
+  | "TAX";
+
+export interface BoardTile {
+  id: number;
+  name: string;
+  type: BoardTileType;
+  price?: number;
+  /** Tiền thuê theo số nhà: [0 nhà, 1 nhà, ..., khách sạn] */
+  rent?: number[];
+  housePrice?: number;
+  houses?: number;
+  hasHotel?: boolean;
+  group?: string;
+  color: string;
+  position: [number, number, number];
+  ownerId?: string;
+}
+
+export interface EnginePlayer {
+  id: string;
+  name: string;
+  type: PawnType;
+  color: string;
+  money: number;
+  /** Chỉ số ô đang đứng (0 - 39) */
+  position: number;
+  /** id các ô đang sở hữu */
+  properties: number[];
+  isBankrupt: boolean;
+  inJail: boolean;
+  jailTurns: number;
+}
+
+export interface GameState {
+  status: "WAITING" | "PLAYING" | "FINISHED";
+  players: EnginePlayer[];
+  currentPlayerIndex: number;
+  dice: { first: number; second: number; total: number };
+  consecutiveDoubles: number;
+  board: BoardTile[];
+  turn: number;
+  logs: string[];
+  winnerId?: string;
+}

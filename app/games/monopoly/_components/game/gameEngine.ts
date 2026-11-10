@@ -1,4 +1,4 @@
-import { GameState, Player, BoardTile } from "@/types/game.types";
+import { EnginePlayer as Player, GameState } from "@/types/game.types";
 import { INITIAL_BOARD } from "./boardData";
 
 export const GO_REWARD = 200;
