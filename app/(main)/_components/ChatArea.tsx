@@ -117,7 +117,6 @@ export default function ChatArea({
       conversationId: string;
       message?: AIMessage;
     }) => {
-      console.log("🚀 ~ aiMessageComplete received:", data);
       dispatch(aiMessageComplete(data));
     };
 
@@ -125,7 +124,6 @@ export default function ChatArea({
       conversationId?: string;
       message: string;
     }) => {
-      console.error("🚀 ~ aiMessageError received:", data);
       dispatch(aiMessageError(data));
     };
 

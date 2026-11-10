@@ -34,7 +34,6 @@ export default function LoginPage() {
     const result = await dispatch(
       login({ email: data.email, password: data.password }),
     );
-    console.log("🚀 ~ onSubmit ~ result:", result);
 
     if (login.fulfilled.match(result)) {
       toast.success("Login successfully");

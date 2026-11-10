@@ -111,6 +111,7 @@ export const getProfile = createAsyncThunk<
 >("auth/getProfile", async (_, thunkAPI) => {
   try {
     const response = await API.get<User>("/auth/profile");
+    console.log("🚀 ~ response:", response);
 
     return response.data;
   } catch (error) {

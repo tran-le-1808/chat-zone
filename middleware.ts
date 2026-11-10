@@ -20,7 +20,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Protect only existing private routes
-  const protectedRoutes = ["/", "/profile", "/chat", "/dashboard"];
+  const protectedRoutes = ["/", "/profile", "/chat", "/dashboard", "/games"];
 
   const isProtectedRoute = protectedRoutes.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
