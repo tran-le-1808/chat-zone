@@ -132,17 +132,19 @@ export default function Tile3D({
       ? tile.name
       : (special?.label ?? tile.name);
 
-  // Dòng giá: đất trống hiện giá mua, đất có chủ hiện tiền thuê (đủ bộ màu -> ghi x2)
+  const isFarRow = Math.floor(tile.id / 9) === 2;
+  // Dòng giá: đất trống hiện giá mua, đất có chủ hiện tiền thuê
+  // (đủ bộ màu: không ghi x2 ở đây — đã có dấu ×2 nổi phía trên ô).
+  // Dãy xa nhìn rất nhỏ -> bỏ chữ "Thuê" (đã có màu & viền chủ sở hữu) để số tiền to hơn
   const priceText =
     isProperty || tile.type === "STATION"
       ? owned
-        ? `Thuê $${tile.currentRent ?? 0}${isMonopoly ? " ×2" : ""}`
+        ? `${isFarRow ? "" : "Thuê "}$${tile.currentRent ?? 0}`
         : `$${tile.landPrice ?? 0}`
       : null;
 
   const bodyW = dx !== 0 ? w - BAND_DEPTH : w;
   const k = textScaleForSide(tile.id);
-  const isFarRow = Math.floor(tile.id / 9) === 2;
   // Dãy xa: dồn chữ về phía gần camera, chừa mép sau cho nhà
   // Ô có biểu tượng (Cơ hội / Khí vận / Thuế): nhãn nằm DƯỚI biểu tượng (gần camera)
   // để biểu tượng cao không che chữ
@@ -151,7 +153,7 @@ export default function Tile3D({
       ? body[1] - 0.02
       : body[1] - 0.28
     : body[1] + (isFarRow ? 0.6 : 0.85);
-  const priceZ = isFarRow ? body[1] + 0.62 : body[1] + 0.42;
+  const priceZ = isFarRow ? body[1] + 0.72 : body[1] + 0.42;
 
   return (
     <group>
@@ -215,7 +217,12 @@ export default function Tile3D({
               <Text
                 {...textProps}
                 position={[body[0], TEXT_Y, priceZ]}
-                fontSize={fitFontSize(priceText, 0.3 * k, bodyW * 0.92)}
+                // Dãy xa: số tiền to gần gấp đôi để nhìn rõ từ camera
+                fontSize={fitFontSize(
+                  priceText,
+                  isFarRow ? 0.62 : 0.3 * k,
+                  bodyW * 0.94,
+                )}
                 color={
                   isMonopoly
                     ? "#c2410c"

@@ -97,7 +97,10 @@ export default function LobbyBrowser() {
         {/* HEADER */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <Link href="/games" className="text-xs text-gray-400 hover:text-white">
+            <Link
+              href="/games"
+              className="text-xs text-gray-400 hover:text-white"
+            >
               ← Khu vực trò chơi
             </Link>
             <h1 className="mt-1 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-3xl font-extrabold text-transparent">

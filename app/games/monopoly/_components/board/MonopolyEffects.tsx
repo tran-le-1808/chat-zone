@@ -239,7 +239,8 @@ export function RentDoubleEffects({
     players.forEach((p) => {
       const was = prevStates.current[p.id];
       const now = pawnStates[p.id] ?? "idle";
-      if (was === "moving" && now !== "moving") {
+      const travelled = (s: PawnState) => s === "moving" || s === "flying";
+      if (travelled(was) && !travelled(now)) {
         const tile = tiles[p.tileIndex];
         if (
           tile &&

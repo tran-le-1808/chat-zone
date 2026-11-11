@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { RPS_STAKE, RpsChoice, useGame } from "../_context/GameContext";
+import { RpsChoice, useGame } from "../_context/GameContext";
 import PlayerAvatar from "./PlayerAvatar";
 import { TOY_COLORS, ToyOverlay, ToyPanel } from "./ui/ToyUI";
 
@@ -24,7 +24,9 @@ export default function RpsModal() {
     handleRpsChoose,
     isOnline,
     currPlayer,
+    economy,
   } = useGame();
+  const RPS_STAKE = economy.rpsStake;
 
   // Đồng hồ đếm ngược (chỉ để hiển thị)
   const [now, setNow] = useState(() => Date.now());
@@ -169,7 +171,7 @@ export default function RpsModal() {
           </>
         ) : (
           /* Kết quả từng cặp đấu */
-          <div className="mt-5 space-y-2">
+          <div className="mt-5 space-y-2 [@media(max-height:500px)]:grid [@media(max-height:500px)]:grid-cols-2 [@media(max-height:500px)]:gap-2 [@media(max-height:500px)]:space-y-0">
             {rpsGame.results?.map((r) => {
               const o = players.find((p) => p.id === r.opponentId);
               const cHand = rpsGame.choices?.[rpsGame.challengerId];
@@ -181,39 +183,65 @@ export default function RpsModal() {
                     ? "red"
                     : "gray";
               const c = TOY_COLORS[col];
-              const text =
+              // Kết quả theo góc nhìn người mở ván: tên (tự rút gọn) + số tiền (luôn hiện đủ)
+              const verb =
                 r.outcome === "draw"
                   ? "Hoà"
                   : r.outcome === "win"
-                    ? `${challenger?.name} thắng +$${r.amount.toLocaleString("vi-VN")}`
-                    : `${challenger?.name} thua −$${r.amount.toLocaleString("vi-VN")}`;
+                    ? "thắng"
+                    : "thua";
+              const amountText =
+                r.outcome === "draw"
+                  ? ""
+                  : `${r.outcome === "win" ? "+" : "−"}$${r.amount.toLocaleString("vi-VN")}`;
               const mine = me && (me.id === r.opponentId || iAmChallenger);
               return (
                 <div
                   key={r.opponentId}
-                  className="toy-pop flex items-center gap-3 rounded-2xl bg-white px-3 py-2"
+                  className="toy-pop flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl bg-white px-2.5 py-2"
                   style={{
                     border: `3px solid ${mine ? c.main : "#f0e3cc"}`,
                     boxShadow: `0 4px 0 ${mine ? c.dark : "#e3d3b5"}`,
                   }}
                 >
-                  <span className="text-3xl">
-                    {cHand ? HANDS[cHand].icon : "?"}
+                  {/* 2 bàn tay */}
+                  <span className="flex shrink-0 items-center gap-1">
+                    <span className="text-2xl sm:text-3xl">
+                      {cHand ? HANDS[cHand].icon : "?"}
+                    </span>
+                    <span className="text-[10px]" style={{ color: "#9aa0b5" }}>
+                      vs
+                    </span>
+                    <span className="text-2xl sm:text-3xl">
+                      {oHand ? HANDS[oHand].icon : "?"}
+                    </span>
                   </span>
-                  <span className="text-xs" style={{ color: "#9aa0b5" }}>
-                    vs
-                  </span>
-                  <span className="text-3xl">
-                    {oHand ? HANDS[oHand].icon : "?"}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-left text-sm">
-                    {o?.name}
-                  </span>
-                  <span
-                    className="shrink-0 rounded-full px-2.5 py-0.5 text-sm"
-                    style={{ background: c.soft, color: c.text }}
-                  >
-                    {text}
+
+                  {/* Đối thủ + kết quả */}
+                  <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+                    <span className="w-full truncate text-sm">
+                      vs {o?.name}
+                    </span>
+                    <span
+                      className="flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+                      style={{ background: c.soft, color: c.text }}
+                    >
+                      {r.outcome === "draw" ? (
+                        <span>Hoà</span>
+                      ) : (
+                        <>
+                          <span className="min-w-0 truncate">
+                            {challenger?.name}
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap">
+                            {verb}
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap">
+                            {amountText}
+                          </span>
+                        </>
+                      )}
+                    </span>
                   </span>
                 </div>
               );

@@ -5,7 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
 export type PawnType = "dragon" | "bunny" | "cat" | "lion";
-export type PawnState = "idle" | "moving" | "winner" | "loser";
+export type PawnState = "idle" | "moving" | "flying" | "winner" | "loser";
 
 interface Pawn3DProps {
   type: PawnType;
@@ -110,12 +110,8 @@ export default function Pawn3D({
         break;
       }
       case "moving": {
-        // Nhảy tưng tưng, nén lại khi chạm đất
-        const hop = Math.abs(Math.sin(t * 10));
-        y += hop * 0.35;
-        sy = 0.86 + hop * 0.2;
-        sx = 1.08 - hop * 0.1;
-        armSwing = Math.sin(t * 20) * 0.7;
+        // Cú nhảy từng ô do bàn cờ điều khiển; ở đây chỉ vung tay & lắc đầu
+        armSwing = Math.sin(t * 14) * 0.8;
         headTilt = Math.sin(t * 10) * 0.12;
         headTurn = 0;
         break;
@@ -153,7 +149,7 @@ export default function Pawn3D({
 
     // Chớp mắt mỗi ~3.5 giây
     if (eyesRef.current) {
-      const blink = (t % 3.5) < 0.12 ? 0.12 : 1;
+      const blink = t % 3.5 < 0.12 ? 0.12 : 1;
       eyesRef.current.scale.y = state === "loser" ? 0.35 : blink;
     }
   });

@@ -5,6 +5,7 @@ import { GameProvider, GameSnapshot } from "../../_context/GameContext";
 import { useRoom } from "../../_context/RoomContext";
 import GameBoard from "../GameBoard";
 import WaitingRoom from "./WaitingRoom";
+import { VoiceProvider } from "../../_context/VoiceContext";
 
 /** Hiển thị phòng chờ hoặc bàn cờ tuỳ theo trạng thái phòng */
 export default function RoomScreen() {
@@ -46,21 +47,26 @@ export default function RoomScreen() {
     );
   }
 
-  if (room.status === "lobby") return <WaitingRoom />;
-
+  // Voice chat bao cả phòng chờ lẫn bàn cờ -> bật ở phòng chờ thì vào game vẫn giữ
   return (
-    <GameProvider
-      key={gameSession}
-      online={{
-        isHost,
-        myUserId,
-        roomPlayers: room.players,
-        settings: room.settings,
-        initialSnapshot: initialSnapshot as GameSnapshot | null,
-        onFinish: finishGame,
-      }}
-    >
-      <GameBoard />
-    </GameProvider>
+    <VoiceProvider>
+      {room.status === "lobby" ? (
+        <WaitingRoom />
+      ) : (
+        <GameProvider
+          key={gameSession}
+          online={{
+            isHost,
+            myUserId,
+            roomPlayers: room.players,
+            settings: room.settings,
+            initialSnapshot: initialSnapshot as GameSnapshot | null,
+            onFinish: finishGame,
+          }}
+        >
+          <GameBoard />
+        </GameProvider>
+      )}
+    </VoiceProvider>
   );
 }

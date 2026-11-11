@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { INITIAL_PLAYERS } from "@/types/game.types";
 import { useRoom } from "../_context/RoomContext";
 import PlayerAvatar from "./PlayerAvatar";
+import { useIsCompact } from "./ui/useScreen";
 
 const QUICK_EMOJIS = ["🎲", "😂", "😭", "🔥", "💸", "👏", "😡", "🏆"];
 
@@ -14,31 +15,42 @@ const formatTime = (ts: number) =>
   });
 
 interface GameChatProps {
-  /** floating: khung nổi trên bàn cờ; inline: nằm trong bố cục phòng chờ */
-  variant?: "floating" | "inline";
+  /**
+   * floating: khung nổi trên bàn cờ;
+   * modal: nút 💬 nổi + bảng chat dạng modal (phòng chờ trên điện thoại);
+   * inline: nằm trong bố cục phòng chờ (iPad / desktop)
+   */
+  variant?: "floating" | "modal" | "inline";
 }
 
 export default function GameChat({ variant = "floating" }: GameChatProps) {
   const { room, chat, myUserId, sendChat } = useRoom();
 
-  const [open, setOpen] = useState(true);
+  const isCompact = useIsCompact();
+  // null = theo mặc định của màn hình (điện thoại: đóng, iPad / desktop: mở)
+  const [openPref, setOpenPref] = useState<boolean | null>(null);
+  const open = openPref ?? !isCompact;
   const [text, setText] = useState("");
   const [seenCount, setSeenCount] = useState(chat.length);
 
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  const isFloating = variant === "floating";
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const isModal = variant === "modal";
+  const isFloating = variant === "floating" || isModal;
   const onlineCount = room?.players.filter((p) => p.connected).length ?? 0;
 
   const unread = open ? 0 : Math.max(chat.length - seenCount, 0);
 
-  // Cuộn xuống tin mới nhất
+  // Cuộn xuống tin mới nhất — chỉ cuộn TRONG khung chat
+  // (scrollIntoView sẽ kéo cả trang xuống, vd. phòng chờ trên điện thoại)
+  const visible = !isFloating || open;
   useEffect(() => {
-    if (!open) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [open, chat.length]);
+    if (!visible) return;
+    const list = listRef.current;
+    if (list) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  }, [visible, chat.length]);
 
   const toggleOpen = () => {
-    setOpen((prev) => !prev);
+    setOpenPref(!open);
     setSeenCount(chat.length);
   };
 
@@ -52,7 +64,12 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
     return (
       <button
         onClick={toggleOpen}
-        className="absolute right-4 top-1/2 z-40 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-2xl text-white shadow-2xl transition hover:opacity-90 active:scale-95"
+        className={
+          isModal
+            ? // Phòng chờ: góc phải, phía trên nút "Bắt đầu / Sẵn sàng" dính đáy
+              "fixed bottom-28 right-3 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-2xl text-white shadow-2xl transition hover:opacity-90 active:scale-95 [@media(max-height:500px)]:bottom-3"
+            : "absolute left-1.5 top-[86px] z-40 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-xl text-white shadow-2xl transition hover:opacity-90 active:scale-95 md:left-auto md:right-4 md:top-1/2 md:h-14 md:w-14 md:-translate-y-1/2 md:text-2xl [@media(max-height:500px)]:left-1.5 [@media(max-height:500px)]:right-auto [@media(max-height:500px)]:top-[86px] [@media(max-height:500px)]:h-10 [@media(max-height:500px)]:w-10 [@media(max-height:500px)]:translate-y-0 [@media(max-height:500px)]:text-xl"
+        }
         aria-label="Mở khung chat"
       >
         💬
@@ -65,12 +82,16 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
     );
   }
 
-  return (
+  const panel = (
     <div
       className={`flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#262a40] shadow-2xl ${
-        isFloating
-          ? "absolute right-4 top-1/2 z-40 h-[52vh] max-h-[520px] w-80 -translate-y-1/2"
-          : "h-full min-h-[420px] w-full"
+        isModal
+          ? // Bảng chat dạng modal: trượt từ dưới lên; điện thoại ngang: bên phải
+            "toy-chat-in fixed inset-x-2 bottom-2 z-[60] h-[72dvh] [@media(max-height:500px)]:left-auto [@media(max-height:500px)]:top-2 [@media(max-height:500px)]:h-auto [@media(max-height:500px)]:w-80"
+          : isFloating
+            ? // Điện thoại: bảng trượt từ dưới lên; iPad / desktop: khung nổi bên phải
+              "absolute inset-x-2 bottom-2 z-[60] h-[60dvh] md:inset-x-auto md:bottom-auto md:right-4 md:top-1/2 md:z-40 md:h-[52vh] md:max-h-[520px] md:w-80 md:-translate-y-1/2 [@media(max-height:500px)]:top-2 [@media(max-height:500px)]:bottom-2 [@media(max-height:500px)]:left-auto [@media(max-height:500px)]:right-2 [@media(max-height:500px)]:w-80 [@media(max-height:500px)]:h-auto [@media(max-height:500px)]:translate-y-0"
+            : "h-full min-h-[420px] w-full"
       }`}
     >
       {/* HEADER */}
@@ -97,7 +118,7 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
       </div>
 
       {/* MESSAGES LIST */}
-      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-3">
         {chat.length === 0 && (
           <p className="pt-6 text-center text-xs text-gray-500">
             Chưa có tin nhắn nào. Hãy chào mọi người một câu! 👋
@@ -142,7 +163,6 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
 
       {/* QUICK EMOJIS */}
@@ -197,5 +217,26 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
         </div>
       </div>
     </div>
+  );
+
+  if (!isModal) return panel;
+
+  // Modal: nền tối phía sau, chạm ra ngoài để đóng
+  return (
+    <>
+      <style>{`
+        @keyframes toy-chat-in {
+          from { transform: translateY(24px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .toy-chat-in { animation: toy-chat-in .22s ease-out both; }
+      `}</style>
+      <div
+        className="fixed inset-0 z-[55] bg-black/50"
+        onClick={toggleOpen}
+        aria-hidden
+      />
+      {panel}
+    </>
   );
 }

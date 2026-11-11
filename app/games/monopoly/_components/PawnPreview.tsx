@@ -8,7 +8,8 @@ import Pawn3D, { PawnState, PawnType } from "./Pawn3D";
 function Turntable({ type, state }: { type: PawnType; state: PawnState }) {
   const ref = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
-    if (ref.current) ref.current.rotation.y = Math.sin(clock.elapsedTime * 0.7) * 0.6;
+    if (ref.current)
+      ref.current.rotation.y = Math.sin(clock.elapsedTime * 0.7) * 0.6;
   });
   return (
     <group ref={ref}>
@@ -44,7 +45,11 @@ export default function PawnPreview({
       >
         <ambientLight intensity={1.4} />
         <directionalLight position={[2, 3, 3]} intensity={1.6} />
-        <directionalLight position={[-2, 1, -2]} intensity={0.5} color="#ffd6f0" />
+        <directionalLight
+          position={[-2, 1, -2]}
+          intensity={0.5}
+          color="#ffd6f0"
+        />
         <Turntable type={type} state={state} />
       </Canvas>
     </div>

@@ -23,9 +23,14 @@ export default function FestivalModal() {
 
   if (!showFestivalModal) return null;
 
-  const owned = board.filter(
-    (tile) => tile.type === "PROPERTY" && tile.ownerId === currPlayer.id,
-  );
+  // Sắp xếp theo tiền thuê (giá hiển thị) từ cao đến thấp; bằng nhau thì theo giá đất
+  const owned = board
+    .filter(
+      (tile) => tile.type === "PROPERTY" && tile.ownerId === currPlayer.id,
+    )
+    .map((tile) => ({ tile, rent: calculateTileRent(tile) }))
+    .sort((a, b) => b.rent - a.rent || b.tile.landPrice - a.tile.landPrice)
+    .map((x) => x.tile);
   const c = TOY_COLORS.pink;
 
   return (
@@ -50,7 +55,7 @@ export default function FestivalModal() {
           ))}
         </div>
 
-        <div className="mt-4 max-h-[46vh] space-y-2.5 overflow-y-auto px-1 pb-2">
+        <div className="mt-4 max-h-[46vh] space-y-2.5 overflow-y-auto px-1 pb-2 [@media(max-height:500px)]:grid [@media(max-height:500px)]:grid-cols-2 [@media(max-height:500px)]:gap-2 [@media(max-height:500px)]:space-y-0 [@media(max-height:500px)]:max-h-[58vh]">
           {owned.map((tile) => (
             <button
               key={tile.id}

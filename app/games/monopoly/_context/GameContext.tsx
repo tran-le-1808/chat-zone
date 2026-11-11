@@ -6,6 +6,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -13,7 +14,6 @@ import {
   INITIAL_PLAYERS,
   PawnState,
   Player,
-  STATION_RENTS,
   TileData,
 } from "@/types/game.types";
 import {
@@ -27,8 +27,10 @@ import { socket } from "@/lib/socket";
 import { monoEmit } from "@/lib/monopolySocket";
 import { toast } from "sonner";
 import { generateInitialBoard } from "../_components/boardConfig";
+import { ECONOMY_BASE, Economy, makeEconomy, roundMoney } from "./economy";
 import {
   CHANCE_CARDS,
+  scaleCards,
   FATE_CARDS,
   GameCard,
   shuffleCards,
@@ -38,6 +40,8 @@ import { getTileSellValue } from "../_components/SellPropertyModal";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface GameContextType {
+  /** Các mức tiền của ván (tỉ lệ với tiền khởi điểm) */
+  economy: Economy;
   board: TileData[];
   players: Player[];
   activePlayerIndex: number;
@@ -78,6 +82,7 @@ interface GameContextType {
   showSellModal: boolean;
   isSettlingTurn: boolean;
   bankruptNotice: BankruptNotice | null;
+  rentNotice: RentNotice | null;
   winner: Player | null;
   handleSellTile: (tileId: number) => void;
   handleAutoSellAll: () => void;
@@ -98,6 +103,21 @@ interface GameContextType {
   handleRpsChoose: (choice: RpsChoice) => void;
 }
 
+/** Thông báo trả tiền thuê (mọi người đều thấy, tự ẩn sau RENT_NOTICE_MS) */
+export interface RentNotice {
+  seq: number;
+  payerId: number;
+  ownerId: number;
+  amount: number;
+  tileName: string;
+  tileColor?: string;
+  /** Chủ sở hữu đủ bộ màu -> tiền thuê x2 */
+  monopoly: boolean;
+  /** Ô đang tổ chức Lễ hội -> tiền thuê x2 */
+  festival: boolean;
+}
+export const RENT_NOTICE_MS = 3200;
+
 export interface BankruptNotice {
   player: Player;
   debt: number;
@@ -117,7 +137,6 @@ export type TurnPhase =
 
 // ===== Mini game Oẳn tù tì =====
 export type RpsChoice = "rock" | "paper" | "scissors";
-export const RPS_STAKE = 1000;
 export const RPS_CHOOSE_MS = 15000;
 export const RPS_REVEAL_MS = 5000;
 
@@ -147,7 +166,6 @@ export interface RpsGame {
 
 // ===== Mini game Xóc đĩa (chẵn / lẻ) =====
 export type XocGuess = "even" | "odd";
-export const XOC_STAKE = 1000;
 export const XOC_GUESS_MS = 15000;
 export const XOC_SHAKE_MS = 2600;
 export const XOC_REVEAL_MS = 5500;
@@ -188,6 +206,14 @@ export const rpsCompare = (a: RpsChoice, b: RpsChoice) =>
       : -1;
 
 export const BANKRUPT_NOTICE_MS = 4000;
+/** Thời gian nhảy qua mỗi ô khi đi theo xúc xắc */
+const PAWN_STEP_MS = 200;
+/** Chờ cú nhảy cuối đáp xong rồi mới xử lý ô */
+const PAWN_LAND_MS = 380;
+/** Du lịch: bay nhanh hơn đi bộ (có thể vượt nhiều ô) */
+/** Đi Du lịch: thời gian lên máy bay & thời gian bay (khớp FLIGHT_S trong Board3D) */
+const FLIGHT_BOARD_MS = 450;
+const FLIGHT_MS = 1900;
 
 interface PendingFinish {
   playerId: number;
@@ -222,6 +248,7 @@ export interface GameSnapshot {
   pendingFinish: PendingFinish | null;
   winnerId: number | null;
   bankruptNotice: BankruptNotice | null;
+  rentNotice: RentNotice | null;
   lastRoll: LastRoll | null;
   rpsGame: RpsGame | null;
   xocGame: XocGame | null;
@@ -277,9 +304,12 @@ export function GameProvider({
   const snap = online?.initialSnapshot ?? null;
   const isOnline = !!online;
   const isHost = online ? online.isHost : true;
+  // Mọi mức tiền tỉ lệ với tiền khởi điểm của phòng (xem economy.ts)
+  const startingMoney = online?.settings.startingMoney;
+  const economy = useMemo(() => makeEconomy(startingMoney), [startingMoney]);
 
   const [board, setBoard] = useState<TileData[]>(
-    () => snap?.board ?? generateInitialBoard(),
+    () => snap?.board ?? generateInitialBoard(economy.scale),
   );
   const [players, setPlayers] = useState<Player[]>(
     () =>
@@ -305,10 +335,11 @@ export function GameProvider({
     snap?.lastRollWasDouble ?? false,
   );
   const [chanceDeck, setChanceDeck] = useState(
-    () => snap?.chanceDeck ?? shuffleCards(CHANCE_CARDS),
+    () =>
+      snap?.chanceDeck ?? shuffleCards(scaleCards(CHANCE_CARDS, economy.scale)),
   );
   const [fateDeck, setFateDeck] = useState(
-    () => snap?.fateDeck ?? shuffleCards(FATE_CARDS),
+    () => snap?.fateDeck ?? shuffleCards(scaleCards(FATE_CARDS, economy.scale)),
   );
 
   const [chanceIndex, setChanceIndex] = useState(snap?.chanceIndex ?? 0);
@@ -328,6 +359,9 @@ export function GameProvider({
   );
   const [winnerId, setWinnerId] = useState<number | null>(
     snap?.winnerId ?? null,
+  );
+  const [rentNotice, setRentNotice] = useState<RentNotice | null>(
+    snap?.rentNotice ?? null,
   );
   const [bankruptNotice, setBankruptNotice] = useState<BankruptNotice | null>(
     snap?.bankruptNotice ?? null,
@@ -380,11 +414,21 @@ export function GameProvider({
       const ownedStations = board.filter(
         (t) => t.type === "STATION" && t.ownerId === tile.ownerId,
       ).length;
-      return STATION_RENTS[ownedStations] || 50;
+      return economy.stationRents[ownedStations] ?? 0;
     }
 
-    let baseRent = tile.rent * (tile.houses + 1);
-    if (tile.hasVilla) baseRent = tile.rent * 6;
+    // Tiền thuê LUÔN lớn hơn số tiền đã bỏ ra để mua mức hiện tại:
+    // tiền thuê = giá trị đầu tư (đất / đất + n nhà / khách sạn) x rentRate (> 1).
+    // Tính ở mức chuẩn $10.000 rồi nhân hệ số -> ván $20.000 gấp đôi chính xác.
+    const invested = tile.hasVilla
+      ? tile.house3Price + tile.villaPrice
+      : ([tile.landPrice, tile.house1Price, tile.house2Price, tile.house3Price][
+          tile.houses
+        ] ?? tile.landPrice);
+    let baseRent = roundMoney(
+      roundMoney((invested / economy.scale) * ECONOMY_BASE.rentRate) *
+        economy.scale,
+    );
 
     if (tile.groupCode) {
       const sameGroupTiles = board.filter(
@@ -598,13 +642,14 @@ export function GameProvider({
     setPawnStates((prev) => ({ ...prev, [playerId]: "moving" }));
 
     for (let i = 1; i <= steps; i++) {
-      await sleep(100);
+      // Mỗi ô 1 cú nhảy (hiệu ứng ở Board3D) -> chậm vừa phải để kịp nhìn
+      await sleep(PAWN_STEP_MS);
       currentPos = (currentPos + 1) % board.length;
 
       if (currentPos === 0) {
         setPlayers((prev) =>
           prev.map((p) =>
-            p.id === playerId ? { ...p, money: p.money + 1000 } : p,
+            p.id === playerId ? { ...p, money: p.money + economy.goSalary } : p,
           ),
         );
       }
@@ -616,7 +661,7 @@ export function GameProvider({
       );
     }
 
-    await sleep(250);
+    await sleep(PAWN_LAND_MS);
     setPawnStates((prev) => ({ ...prev, [playerId]: "idle" }));
     resolveTileAction(playerId, currentPos, isDouble);
   };
@@ -742,6 +787,9 @@ export function GameProvider({
     tileIdx: number,
     isDouble = false,
   ) => {
+    // Hàm này chạy sau khi quân cờ đi xong (sau các lần await), nên `players` trong
+    // closure đã cũ (chưa có tiền thưởng qua ô Bắt đầu...). Dùng bản mới nhất.
+    const players = latestRef.current.players;
     const tile = board[tileIdx];
     const player = players.find((p) => p.id === playerId)!;
 
@@ -791,6 +839,28 @@ export function GameProvider({
 
       // Tính số tiền còn lại của A sau khi trừ tiền thuê
       const updatedPlayerAMoney = player.money - rentAmount;
+
+      // Thông báo trả tiền thuê cho cả phòng
+      const isMonopolyGroup =
+        !!tile.groupCode &&
+        board
+          .filter((t) => t.groupCode === tile.groupCode)
+          .every((t) => t.ownerId === tile.ownerId);
+      const rentSeq = nowMs();
+      setRentNotice({
+        seq: rentSeq,
+        payerId: playerId,
+        ownerId: tile.ownerId,
+        amount: rentAmount,
+        tileName: tile.name,
+        tileColor: tile.color,
+        monopoly: tile.type !== "STATION" && isMonopolyGroup,
+        festival: !!tile.isFestival,
+      });
+      setTimeout(
+        () => setRentNotice((prev) => (prev?.seq === rentSeq ? null : prev)),
+        RENT_NOTICE_MS,
+      );
 
       // Cập nhật trừ tiền A và cộng tiền thuê cho B ngay lập tức
       setPlayers((prev) =>
@@ -919,47 +989,36 @@ export function GameProvider({
     const targetTile = board[targetTileIdx];
     if (!targetTile) return;
 
-    const startTileIdx = player.tileIndex;
-    const steps = (targetTileIdx - startTileIdx + board.length) % board.length;
+    // Bay thẳng tới ô đích (không đi từng ô). Bay vòng qua ô Bắt đầu
+    // (kể cả khi bay vào Nhà tù) vẫn nhận tiền qua ô Bắt đầu.
+    const passesGo = targetTileIdx < player.tileIndex;
 
+    // Lên máy bay
     setPlayers((prev) =>
       prev.map((p) => (p.id === playerId ? { ...p, canTeleport: false } : p)),
     );
-    setPawnStates((prev) => ({ ...prev, [playerId]: "moving" }));
+    setPawnStates((prev) => ({ ...prev, [playerId]: "flying" }));
+    await sleep(FLIGHT_BOARD_MS);
 
-    let currentPos = startTileIdx;
-    for (let i = 0; i < steps; i++) {
-      currentPos = (currentPos + 1) % board.length;
-      if (currentPos === 0) {
-        setPlayers((prev) =>
-          prev.map((p) =>
-            p.id === playerId ? { ...p, money: p.money + 200 } : p,
-          ),
-        );
-      }
-      setPlayers((prev) =>
-        prev.map((p) =>
-          p.id === playerId ? { ...p, tileIndex: currentPos } : p,
-        ),
-      );
-      await sleep(50);
-    }
-
+    // Cất cánh: đổi ô đích -> Board3D cho máy bay bay theo đường vòng cung
     setPlayers((prev) =>
       prev.map((p) =>
         p.id === playerId
           ? {
               ...p,
               tileIndex: targetTileIdx,
+              money: passesGo ? p.money + economy.goSalary : p.money,
               canTeleport: false,
               doublesCount: 0,
             }
           : p,
       ),
     );
+    await sleep(FLIGHT_MS);
 
-    await sleep(350);
+    // Hạ cánh: nhân vật bước ra khỏi máy bay rồi mới xử lý ô đích
     setPawnStates((prev) => ({ ...prev, [playerId]: "idle" }));
+    await sleep(450);
     resolveTileAction(playerId, targetTileIdx, false);
   };
 
@@ -1063,7 +1122,7 @@ export function GameProvider({
       previousOwnerId !== undefined && previousOwnerId !== currPlayer.id;
 
     if (currentTile.type === "STATION") {
-      cost = 200;
+      cost = currentTile.landPrice;
     } else if (previousOwnerId === undefined) {
       // 1. MUA ĐẤT TRỐNG CỦA NGÂN HÀNG
       if (targetLevel === "land") cost = currentTile.landPrice;
@@ -1103,10 +1162,33 @@ export function GameProvider({
 
       moneyToPreviousOwner = propertyBaseCost;
 
+      // Giá trọn gói theo số nhà (đất + n nhà)
+      const levelPrice = [
+        currentTile.landPrice,
+        currentTile.house1Price,
+        currentTile.house2Price,
+        currentTile.house3Price,
+      ];
+      const wantHouses =
+        targetLevel === "house1"
+          ? 1
+          : targetLevel === "house2"
+            ? 2
+            : targetLevel === "house3"
+              ? 3
+              : 0;
+
       if (targetLevel === "villa") {
+        // Khách sạn chỉ xây được trên ô đã có đủ 3 nhà
+        if (currentTile.houses !== 3) return false;
         cost = propertyBaseCost + currentTile.villaPrice;
         isVilla = true;
         newHouses = 0;
+      } else if (wantHouses > currentTile.houses) {
+        // Mua lại rồi xây thêm nhà ngay: trả đối thủ giá hiện tại
+        // + trả ngân hàng phần chênh lệch để lên số nhà mong muốn
+        cost = propertyBaseCost + (levelPrice[wantHouses] - propertyBaseCost);
+        newHouses = wantHouses;
       } else {
         cost = propertyBaseCost;
       }
@@ -1173,7 +1255,7 @@ export function GameProvider({
   };
 
   const handlePayJailBail = () => {
-    const BAIL_COST = 200;
+    const BAIL_COST = economy.jailBail;
     if (currPlayer.money < BAIL_COST) {
       return;
     }
@@ -1369,7 +1451,7 @@ export function GameProvider({
     );
   };
 
-  /** Lật bài & chuyển tiền: thắng nhận $1000 từ đối thủ, thua trả đối thủ $1000 */
+  /** Lật bài & chuyển tiền: thắng nhận economy.rpsStake từ mỗi đối thủ, thua trả lại bấy nhiêu */
   const resolveRps = (gameId: number) => {
     if (!rpsGame || rpsGame.id !== gameId || rpsGame.phase !== "choosing")
       return;
@@ -1396,7 +1478,7 @@ export function GameProvider({
       if (r === 1) {
         // Đối thủ không bị âm tiền vì mini game: trả tối đa số tiền đang có
         const amount = Math.min(
-          RPS_STAKE,
+          economy.rpsStake,
           Math.max(0, opp.money + (delta[oid] ?? 0)),
         );
         add(oid, -amount);
@@ -1404,9 +1486,13 @@ export function GameProvider({
         results.push({ opponentId: oid, outcome: "win", amount });
       } else if (r === -1) {
         // Người đi vào ô trả đủ (nếu âm tiền -> quy trình bán nhà / phá sản như thường)
-        add(cid, -RPS_STAKE);
-        add(oid, RPS_STAKE);
-        results.push({ opponentId: oid, outcome: "lose", amount: RPS_STAKE });
+        add(cid, -economy.rpsStake);
+        add(oid, economy.rpsStake);
+        results.push({
+          opponentId: oid,
+          outcome: "lose",
+          amount: economy.rpsStake,
+        });
       } else {
         results.push({ opponentId: oid, outcome: "draw", amount: 0 });
       }
@@ -1499,14 +1585,19 @@ export function GameProvider({
       if (!p || p.isBankrupt || !g || g === "skip")
         return { playerId: pid, guess: null, outcome: "skip", amount: 0 };
       if (g === answer) {
-        delta[pid] = XOC_STAKE; // ngân hàng trả thưởng
-        return { playerId: pid, guess: g, outcome: "win", amount: XOC_STAKE };
+        delta[pid] = economy.xocStake; // ngân hàng trả thưởng
+        return {
+          playerId: pid,
+          guess: g,
+          outcome: "win",
+          amount: economy.xocStake,
+        };
       }
       // Đoán sai: người đi vào ô trả đủ; người khác trả tối đa số tiền đang có
       const amount =
         pid === xocGame.starterId
-          ? XOC_STAKE
-          : Math.min(XOC_STAKE, Math.max(0, p.money));
+          ? economy.xocStake
+          : Math.min(economy.xocStake, Math.max(0, p.money));
       delta[pid] = -amount;
       return { playerId: pid, guess: g, outcome: "lose", amount };
     });
@@ -1596,7 +1687,7 @@ export function GameProvider({
         if (
           turnPhase === "roll" &&
           currPlayer.inJail &&
-          currPlayer.money >= 200 &&
+          currPlayer.money >= economy.jailBail &&
           acquireLock()
         )
           handlePayJailBail();
@@ -1712,6 +1803,7 @@ export function GameProvider({
     if ("pendingFinish" in s) setPendingFinish(s.pendingFinish ?? null);
     if ("winnerId" in s) setWinnerId(s.winnerId ?? null);
     if ("bankruptNotice" in s) setBankruptNotice(s.bankruptNotice ?? null);
+    if ("rentNotice" in s) setRentNotice(s.rentNotice ?? null);
     if ("lastRoll" in s) setLastRoll(s.lastRoll ?? null);
     if ("rpsGame" in s) setRpsGame(s.rpsGame ?? null);
     if ("xocGame" in s) setXocGame(s.xocGame ?? null);
@@ -1814,6 +1906,7 @@ export function GameProvider({
       pendingFinish,
       winnerId,
       bankruptNotice,
+      rentNotice,
       lastRoll,
       rpsGame,
       xocGame,
@@ -1857,6 +1950,7 @@ export function GameProvider({
     pendingFinish,
     winnerId,
     bankruptNotice,
+    rentNotice,
     lastRoll,
     rpsGame,
     xocGame,
@@ -1978,6 +2072,7 @@ export function GameProvider({
         setDrawnCard,
         taxNotification,
         setTaxNotification,
+        economy,
         calculateTileRent,
         // Mọi thao tác của người chơi đều đi qua sendAction
         handleTravelToTile: async (tileId) => sendAction("travel", { tileId }),
@@ -1995,6 +2090,7 @@ export function GameProvider({
         showSellModal,
         isSettlingTurn: pendingFinish !== null,
         bankruptNotice,
+        rentNotice,
         winner:
           winnerId !== null
             ? (players.find((p) => p.id === winnerId) ?? null)

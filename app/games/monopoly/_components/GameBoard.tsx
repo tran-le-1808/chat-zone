@@ -18,6 +18,10 @@ import GameChat from "./GameChat";
 import TurnStatusBar from "./TurnStatusBar";
 import RpsModal from "./RpsModal";
 import XocDiaModal from "./XocDiaModal";
+import RentNotification from "./RentNotification";
+import { useIsCompact } from "./ui/useScreen";
+import RotateDeviceOverlay from "./ui/RotateDeviceOverlay";
+import VoiceControls from "./VoiceControls";
 
 export default function GameBoard() {
   const {
@@ -42,6 +46,7 @@ export default function GameBoard() {
     turnPhase,
   } = useGame();
   const roomCtx = useOptionalRoom();
+  const isCompact = useIsCompact();
 
   const canRoll = isMyTurn && turnPhase === "roll" && !currPlayer.inJail;
 
@@ -86,7 +91,7 @@ export default function GameBoard() {
   };
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#0c0d14] text-white select-none">
+    <div className="relative h-[100dvh] w-screen overflow-hidden bg-[#0c0d14] text-white select-none">
       <div className="absolute inset-0 z-0">
         <Monopoly3DScene
           players={scenePlayers}
@@ -97,30 +102,50 @@ export default function GameBoard() {
         />
       </div>
 
-      {/* Lượt hiện tại / đồng hồ / kết quả xúc xắc */}
-      <TurnStatusBar />
+      {/* Điện thoại cầm dọc -> nhắc xoay ngang (bàn cờ luôn chơi ngang) */}
+      <RotateDeviceOverlay />
 
       {/* Hiển thị thẻ thông tin người chơi */}
       <PlayerCards />
 
       {/* Khung chat (phải) */}
       {roomCtx && <GameChat />}
+      {/* Voice chat (giữ nguyên nếu đã bật ở phòng chờ) */}
+      <VoiceControls variant="game" />
 
-      {/* Mã phòng & rời phòng */}
+      {/* Bên trái (dưới thẻ người chơi góc trái): mã phòng & rời phòng */}
       {roomCtx && (
-        <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/10 bg-black/80 px-3 py-1.5 text-xs">
-          <span className="text-gray-400">Phòng</span>
+        <div
+          className={`absolute z-30 flex items-center rounded-2xl border border-white/10 bg-black/80 ${
+            isCompact
+              ? "left-1.5 top-[48px] gap-1 px-2 py-1 text-[11px]"
+              : "left-4 top-[100px] gap-2 px-3 py-1.5 text-xs"
+          }`}
+        >
+          {!isCompact && <span className="text-gray-400">Phòng</span>}
           <span className="font-mono font-bold tracking-widest text-cyan-300">
             {roomCtx.code}
           </span>
           <button
             onClick={handleLeave}
+            title="Rời phòng"
             className="ml-1 rounded-lg bg-white/10 px-2 py-1 text-gray-300 transition hover:bg-rose-500/30 hover:text-white"
           >
-            🚪 Rời phòng
+            🚪{!isCompact && " Rời phòng"}
           </button>
         </div>
       )}
+
+      {/* Bên phải (dưới thẻ người chơi góc phải): lượt hiện tại / kết quả xúc xắc */}
+      <div
+        className={`pointer-events-none absolute z-30 ${
+          isCompact
+            ? "right-1.5 top-[48px] max-w-[60%] [@media(max-height:500px)]:max-w-[180px]"
+            : "right-4 top-[100px] max-w-[340px]"
+        }`}
+      >
+        <TurnStatusBar />
+      </div>
 
       {/* Chế độ Du lịch */}
       <TravelOverlay />
@@ -162,6 +187,8 @@ export default function GameBoard() {
       {/* Mini game Xóc đĩa chẵn / lẻ */}
       <XocDiaModal />
       <TaxNotification />
+      {/* Trả tiền thuê: banner phía trên, không chặn thao tác */}
+      <RentNotification />
       <BankruptNotification />
 
       {/* Người chiến thắng */}
@@ -178,10 +205,18 @@ export default function GameBoard() {
           <WinnerModal winner={winner} />
         ))}
 
-      {/* Bộ Lắc Xúc Xắc */}
+      {/* Bộ Lắc Xúc Xắc: luôn ở giữa bàn cờ (điện thoại thu nhỏ lại để không che ô) */}
       {canRoll && (
-        <div className="absolute bottom-1/2 left-1/2 -translate-x-1/2 translate-y-1/2 z-50 flex flex-col items-center gap-2 w-80">
-          <DiceRoller3D onRollComplete={handleRollComplete} />
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
+          <div
+            className={`pointer-events-auto ${
+              isCompact
+                ? "w-72 scale-[0.66] [@media(max-height:500px)]:scale-[0.6]"
+                : "w-80"
+            }`}
+          >
+            <DiceRoller3D onRollComplete={handleRollComplete} />
+          </div>
         </div>
       )}
     </div>

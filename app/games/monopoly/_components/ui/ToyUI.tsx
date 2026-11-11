@@ -2,6 +2,7 @@
 
 import React from "react";
 import localFont from "next/font/local";
+import { useIsPhoneLandscape } from "./useScreen";
 
 /**
  * Bộ giao diện "đồ chơi" dùng chung cho mọi modal trong game Cờ Tỷ Phú:
@@ -77,11 +78,14 @@ export function ToyOverlay({
 }) {
   return (
     <div
-      className={`${toyFont.className} toy-fade fixed inset-0 flex items-center justify-center p-4`}
+      className={`${toyFont.className} toy-fade fixed inset-0 overflow-y-auto overscroll-contain`}
       style={{ zIndex: z, background: "rgba(16, 24, 56, 0.62)" }}
     >
       <ToyKeyframes />
-      {children}
+      {/* Modal cao hơn màn hình (điện thoại xoay ngang...) thì cuộn được, vẫn căn giữa khi đủ chỗ */}
+      <div className="flex min-h-full items-center justify-center px-3 py-12 sm:px-4 [@media(max-height:500px)]:py-3">
+        {children}
+      </div>
     </div>
   );
 }
@@ -97,7 +101,9 @@ interface ToyPanelProps {
   maxWidth?: number;
 }
 
-/** Panel kem bo tròn, viền dày màu nhấn, huy hiệu biểu tượng nhô lên ở đỉnh */
+/** Panel kem bo tròn, viền dày màu nhấn, huy hiệu biểu tượng nhô lên ở đỉnh.
+ *  Điện thoại xoay ngang: chuyển sang bố cục 2 cột (biểu tượng + tiêu đề | nội dung)
+ *  để modal rộng ra thay vì dài xuống. */
 export function ToyPanel({
   color = "blue",
   icon,
@@ -108,25 +114,65 @@ export function ToyPanel({
   maxWidth = 400,
 }: ToyPanelProps) {
   const c = TOY_COLORS[color];
+  const isLandscape = useIsPhoneLandscape();
+
+  const panelStyle: React.CSSProperties = {
+    background: "linear-gradient(180deg, #fffaf0 0%, #fff1dc 100%)",
+    border: `5px solid ${c.main}`,
+    boxShadow: `0 10px 0 ${c.dark}, 0 24px 50px rgba(0,0,0,0.35)`,
+    color: "#2b2f48",
+  };
+  const badgeStyle: React.CSSProperties = {
+    background: `radial-gradient(circle at 35% 30%, #ffffff 0%, ${c.soft} 45%, ${c.main} 100%)`,
+    border: `5px solid #fffaf0`,
+    boxShadow: `0 6px 0 ${c.dark}, 0 10px 20px rgba(0,0,0,0.25)`,
+  };
+
+  if (isLandscape) {
+    return (
+      <div
+        className={`toy-pop relative flex w-full items-stretch gap-4 rounded-[26px] p-4 text-center ${className}`}
+        style={{ ...panelStyle, maxWidth: Math.max(maxWidth + 220, 600) }}
+      >
+        {(icon || title || subtitle) && (
+          <div className="flex w-36 shrink-0 flex-col items-center justify-center">
+            {icon && (
+              <div
+                className="toy-bob mb-2 flex h-16 w-16 items-center justify-center rounded-full text-3xl"
+                style={badgeStyle}
+              >
+                {icon}
+              </div>
+            )}
+            {title && (
+              <h2
+                className="text-lg leading-tight tracking-wide"
+                style={{ color: c.dark }}
+              >
+                {title}
+              </h2>
+            )}
+            {subtitle && (
+              <p className="mt-1 text-xs" style={{ color: "#6b7085" }}>
+                {subtitle}
+              </p>
+            )}
+          </div>
+        )}
+        <div className="min-w-0 flex-1 [&>*:first-child]:mt-0">{children}</div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`toy-pop relative w-full rounded-[32px] px-5 pb-5 text-center ${icon ? "pt-12" : "pt-6"} ${className}`}
-      style={{
-        maxWidth,
-        background: "linear-gradient(180deg, #fffaf0 0%, #fff1dc 100%)",
-        border: `5px solid ${c.main}`,
-        boxShadow: `0 10px 0 ${c.dark}, 0 24px 50px rgba(0,0,0,0.35)`,
-        color: "#2b2f48",
-      }}
+      style={{ ...panelStyle, maxWidth }}
     >
       {icon && (
         <div
           className="toy-bob absolute left-1/2 top-0 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-4xl"
-          style={{
-            background: `radial-gradient(circle at 35% 30%, #ffffff 0%, ${c.soft} 45%, ${c.main} 100%)`,
-            border: `5px solid #fffaf0`,
-            boxShadow: `0 6px 0 ${c.dark}, 0 10px 20px rgba(0,0,0,0.25)`,
-          }}
+          style={badgeStyle}
         >
           {icon}
         </div>

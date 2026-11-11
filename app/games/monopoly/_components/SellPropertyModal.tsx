@@ -6,7 +6,8 @@ import { TOY_COLORS, ToyButton, ToyOverlay, ToyPanel } from "./ui/ToyUI";
 
 // Giá trị thu hồi khi bán 1 ô đất (50% giá trị đầu tư)
 export const getTileSellValue = (tile: TileData) => {
-  if (tile.type === "STATION") return 100;
+  // Bán lại = 50% số tiền đã bỏ ra (bến xe: nửa giá mua)
+  if (tile.type === "STATION") return Math.round(tile.landPrice * 0.5);
   if (tile.hasVilla)
     return Math.round((tile.landPrice + tile.villaPrice) * 0.5);
 
@@ -49,7 +50,7 @@ export default function SellPropertyModal({
 
         {/* Danh sách nhà có thể bán */}
         {ownedTiles.length > 0 ? (
-          <div className="mt-4 max-h-56 space-y-2.5 overflow-y-auto px-1 pb-2">
+          <div className="mt-4 max-h-56 space-y-2.5 overflow-y-auto px-1 pb-2 [@media(max-height:500px)]:grid [@media(max-height:500px)]:grid-cols-2 [@media(max-height:500px)]:gap-2 [@media(max-height:500px)]:space-y-0 [@media(max-height:500px)]:max-h-[58vh]">
             {ownedTiles.map((tile) => {
               const sellValue = getTileSellValue(tile);
               return (
@@ -103,7 +104,7 @@ export default function SellPropertyModal({
         )}
 
         {/* Các nút hành động */}
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 space-y-3 [@media(max-height:500px)]:grid [@media(max-height:500px)]:grid-cols-2 [@media(max-height:500px)]:gap-2 [@media(max-height:500px)]:space-y-0">
           {ownedTiles.length > 0 && (
             <ToyButton color="gold" onClick={onAutoSellAll}>
               <span className="mx-auto">⚡ Bán tự động đến khi hết nợ</span>

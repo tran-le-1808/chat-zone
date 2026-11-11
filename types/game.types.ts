@@ -55,8 +55,6 @@ export interface TileData {
   isFestival?: boolean;
 }
 
-export const STATION_RENTS = [0, 100, 200, 400, 800];
-
 export const INITIAL_PLAYERS: Player[] = [
   {
     id: 0,
@@ -119,11 +117,7 @@ export const INITIAL_PLAYERS: Player[] = [
 export type CardDeckType = "CHANCE" | "FATE";
 
 export type CardEffectType =
-  | "ADD_MONEY"
-  | "PAY_MONEY"
-  | "MOVE_STEPS"
-  | "MOVE_TO_TYPE"
-  | "GO_TO_JAIL";
+  "ADD_MONEY" | "PAY_MONEY" | "MOVE_STEPS" | "MOVE_TO_TYPE" | "GO_TO_JAIL";
 
 export interface GameCard {
   id: string;

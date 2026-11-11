@@ -1,4 +1,5 @@
 import { TileData, TileType } from "@/types/game.types";
+import { ECONOMY_BASE, roundMoney } from "../_context/economy";
 
 export const BOARD_TILES_CONFIG: {
   name: string;
@@ -162,7 +163,11 @@ export const BOARD_TILES_CONFIG: {
   },
 ];
 
-export function generateInitialBoard(): TileData[] {
+/**
+ * Tạo bàn cờ. `economyScale` = tiền khởi điểm / 10.000 (xem _context/economy.ts):
+ * ván $20.000 -> giá đất / nhà / tiền thuê gấp đôi.
+ */
+export function generateInitialBoard(economyScale = 1): TileData[] {
   const SCALE = 1.25;
 
   const normalW = 2.0 * SCALE; // Chiều rộng ô thường (2.5)
@@ -237,7 +242,17 @@ export function generateInitialBoard(): TileData[] {
       }
     }
 
-    const base = cfg.basePrice || 100;
+    // Giá đất theo kinh tế của ván (bến xe có giá riêng)
+    // Giá ở mức chuẩn $10.000 (làm tròn), rồi mới nhân hệ số tiền khởi điểm
+    // -> ván $20.000 gấp đôi CHÍNH XÁC từng con số
+    const E = ECONOMY_BASE;
+    const land1x =
+      cfg.type === "STATION"
+        ? E.stationPrice
+        : roundMoney((cfg.basePrice || 100) * E.landFactor);
+    const price = (factor: number) =>
+      roundMoney(roundMoney(land1x * factor) * economyScale);
+    const base = price(1);
 
     return {
       id: i,
@@ -250,12 +265,12 @@ export function generateInitialBoard(): TileData[] {
       size,
 
       landPrice: base,
-      house1Price: base + 50,
-      house2Price: base + 120,
-      house3Price: base + 220,
-      villaPrice: base + 400,
+      house1Price: price(E.house1Factor),
+      house2Price: price(E.house2Factor),
+      house3Price: price(E.house3Factor),
+      villaPrice: price(E.villaFactor),
 
-      rent: Math.round(base * 1.2),
+      rent: price(E.rentRate),
 
       houses: 0,
       hasVilla: false,

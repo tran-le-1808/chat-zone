@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { useIsCompact, useIsPhoneLandscape } from "./ui/useScreen";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import Pawn3D, { PawnState, PawnType } from "./Pawn3D";
@@ -127,6 +128,26 @@ function FestivalTileGlow({ size }: { size: [number, number, number] }) {
 /** Kích thước nhân vật trên bàn cờ */
 const PAWN_SCALE = 1.5;
 
+// ---- Nhảy từng ô ----
+/** Thời gian 1 cú nhảy sang ô kế (giây) – ngắn hơn khoảng cách giữa 2 bước trong GameContext */
+const HOP_BASE_S = 0.24;
+const HOP_MAX_S = 0.6;
+/** Độ cao cú nhảy (tăng theo khoảng cách, vd. bay tới ô Du lịch / bị bắt vào tù) */
+const HOP_BASE_HEIGHT = 0.7;
+const HOP_MAX_HEIGHT = 2.2;
+/** Nén người khi đáp xuống ô */
+const LAND_SQUASH_S = 0.16;
+
+// ---- Bay tới ô đích khi đi Du lịch ----
+/** Thời gian chuyến bay (giây) – khớp FLIGHT_MS trong GameContext */
+const FLIGHT_S = 1.9;
+const FLIGHT_BASE_HEIGHT = 3.2;
+const FLIGHT_MAX_HEIGHT = 6.5;
+const PLANE_SCALE = 0.9;
+
+const easeInOut = (p: number) =>
+  p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+
 function SmoothPawn({
   targetPos,
   type,
@@ -141,53 +162,187 @@ function SmoothPawn({
   color: string;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const bodyRef = useRef<THREE.Group>(null);
+  const planeRef = useRef<THREE.Group>(null);
   const discRef = useRef<THREE.Mesh>(null);
   const puffRef = useRef<THREE.Mesh>(null);
+  const stepRingRef = useRef<THREE.Mesh>(null);
   const puffT = useRef(-1);
+  const stepRingT = useRef(-1);
   const wasMoving = useRef(false);
-  const currentPos = useRef(
-    new THREE.Vector3(
-      targetPos[0] + offset[0],
-      targetPos[1],
-      targetPos[2] + offset[1],
-    ),
+
+  // Trạng thái cú nhảy / chuyến bay hiện tại
+  const initPos = new THREE.Vector3(
+    targetPos[0] + offset[0],
+    targetPos[1],
+    targetPos[2] + offset[1],
   );
+  const currentPos = useRef(initPos);
+  const hopFrom = useRef(initPos.clone());
+  const hopTo = useRef(initPos.clone());
+  const hopT = useRef(-1);
+  const hopDur = useRef(HOP_BASE_S);
+  const hopHeight = useRef(HOP_BASE_HEIGHT);
+  /** Cú di chuyển hiện tại là chuyến bay (đi Du lịch) */
+  const isFlight = useRef(false);
+  const landT = useRef(-1);
+  const yaw = useRef(0);
+  const facing = useRef(0);
+  /** 0 = nhân vật đứng, 1 = đang ở trong máy bay */
+  const planeMix = useRef(0);
+  const tmp = useRef(new THREE.Vector3());
 
   useFrame(({ clock }, delta) => {
-    if (!groupRef.current) return;
-    const targetVector = new THREE.Vector3(
+    const g = groupRef.current;
+    if (!g) return;
+    const dt = Math.min(delta, 0.05);
+    const target = tmp.current.set(
       targetPos[0] + offset[0],
       targetPos[1],
       targetPos[2] + offset[1],
     );
+    const flying = state === "flying";
 
-    currentPos.current.lerp(targetVector, 0.35);
-
-    const dist = currentPos.current.distanceToSquared(targetVector);
-    if (dist < 0.0001) {
-      currentPos.current.copy(targetVector);
-      // Vừa đáp xuống ô -> phụt bụi
-      if (wasMoving.current && state !== "moving") {
-        wasMoving.current = false;
-        puffT.current = 0;
+    // Có ô đích mới -> nhảy sang ô kế, hoặc bay thẳng tới đích khi đi Du lịch
+    if (hopTo.current.distanceToSquared(target) > 1e-6) {
+      hopFrom.current.copy(currentPos.current);
+      hopTo.current.copy(target);
+      const dist = hopFrom.current.distanceTo(hopTo.current);
+      isFlight.current = flying;
+      if (flying) {
+        hopDur.current = FLIGHT_S;
+        hopHeight.current = Math.min(
+          FLIGHT_MAX_HEIGHT,
+          FLIGHT_BASE_HEIGHT + dist * 0.12,
+        );
+      } else {
+        hopDur.current = Math.min(HOP_MAX_S, HOP_BASE_S + dist * 0.02);
+        hopHeight.current = Math.min(
+          HOP_MAX_HEIGHT,
+          HOP_BASE_HEIGHT + dist * 0.08,
+        );
       }
-    } else if (dist > 0.01) {
+      const dx = hopTo.current.x - hopFrom.current.x;
+      const dz = hopTo.current.z - hopFrom.current.z;
+      if (dx * dx + dz * dz > 1e-4) facing.current = Math.atan2(dx, dz);
+      hopT.current = 0;
       wasMoving.current = true;
     }
 
-    groupRef.current.position.copy(currentPos.current);
+    let lift = 0;
+    let sy = 1;
+    let pitch = 0;
+    if (hopT.current >= 0) {
+      hopT.current = Math.min(1, hopT.current + dt / hopDur.current);
+      const p = hopT.current;
+      const e = easeInOut(p);
+      currentPos.current.lerpVectors(hopFrom.current, hopTo.current, e);
+      // Đường vòng cung (cú nhảy thấp / chuyến bay cao)
+      lift = 4 * hopHeight.current * p * (1 - p);
+      if (isFlight.current) {
+        // Mũi máy bay ngóc lên khi cất cánh, chúc xuống khi hạ cánh
+        const dist = hopFrom.current.distanceTo(hopTo.current);
+        const climb = 4 * hopHeight.current * (1 - 2 * p);
+        const ground = dist * 4 * Math.min(p, 1 - p) + 0.5;
+        pitch = THREE.MathUtils.clamp(-Math.atan2(climb, ground), -0.6, 0.6);
+      } else {
+        sy = 1 + 0.14 * Math.sin(Math.PI * p);
+      }
+      if (p >= 1) {
+        hopT.current = -1;
+        landT.current = 0;
+        if (!isFlight.current) stepRingT.current = 0;
+      }
+    }
 
-    // Đĩa màu người chơi nhấp nháy nhẹ
+    // Nén người khi chạm ô
+    if (landT.current >= 0) {
+      landT.current += dt;
+      const q = Math.min(1, landT.current / LAND_SQUASH_S);
+      sy = 1 - 0.2 * Math.sin(Math.PI * q);
+      if (q >= 1) landT.current = -1;
+    }
+
+    // Đáp xuống ô cuối cùng -> phụt bụi lớn
+    if (
+      wasMoving.current &&
+      hopT.current < 0 &&
+      state !== "moving" &&
+      !flying
+    ) {
+      wasMoving.current = false;
+      puffT.current = 0;
+    }
+
+    g.position.set(
+      currentPos.current.x,
+      currentPos.current.y + lift,
+      currentPos.current.z,
+    );
+
+    // Chuyển đổi nhân vật <-> máy bay (thu nhỏ / phóng to mượt)
+    const wantPlane = flying || (isFlight.current && hopT.current >= 0);
+    planeMix.current +=
+      ((wantPlane ? 1 : 0) - planeMix.current) * Math.min(1, dt * 9);
+    const mix = planeMix.current;
+
+    if (bodyRef.current) {
+      const sxz = 1 / Math.sqrt(sy); // giữ thể tích khi co giãn
+      const k = 1 - mix;
+      bodyRef.current.visible = k > 0.02;
+      bodyRef.current.scale.set(sxz * k, sy * k, sxz * k);
+      // Quay mặt theo hướng đi; đứng yên thì quay lại nhìn camera
+      const wantYaw = state === "moving" || flying ? facing.current : 0;
+      let diff = wantYaw - yaw.current;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      yaw.current += diff * Math.min(1, dt * 10);
+      bodyRef.current.rotation.y = yaw.current;
+    }
+
+    if (planeRef.current) {
+      const pl = planeRef.current;
+      pl.visible = mix > 0.02;
+      pl.scale.setScalar(mix * PLANE_SCALE);
+      pl.rotation.set(0, 0, 0);
+      pl.rotation.y = facing.current;
+      // Đang bay: nghiêng mũi theo quỹ đạo + chao cánh nhẹ; chờ cất cánh: lơ lửng
+      const bob = Math.sin(clock.elapsedTime * 5) * 0.06;
+      pl.position.y = 0.6 + (hopT.current >= 0 ? 0 : bob);
+      pl.rotateX(pitch);
+      pl.rotateZ(Math.sin(clock.elapsedTime * 3) * 0.12);
+      // Cánh quạt quay
+      const prop = pl.getObjectByName("propeller");
+      if (prop) prop.rotation.z += dt * 40;
+    }
+
+    // Đĩa màu người chơi nhấp nháy nhẹ (nằm trên ô, như bóng máy bay khi bay)
     if (discRef.current) {
+      discRef.current.position.y = 0.035 - lift;
       const m = discRef.current.material as THREE.MeshBasicMaterial;
       m.opacity = 0.45 + Math.sin(clock.elapsedTime * 3) * 0.12;
     }
 
-    // Vòng bụi khi đáp
+    // Vòng sáng mỗi bước
+    if (stepRingRef.current) {
+      const m = stepRingRef.current.material as THREE.MeshBasicMaterial;
+      if (stepRingT.current >= 0) {
+        stepRingT.current += dt;
+        const p = stepRingT.current / 0.35;
+        stepRingRef.current.visible = p < 1;
+        stepRingRef.current.position.y = 0.05 - lift;
+        stepRingRef.current.scale.setScalar(0.5 + p * 0.9);
+        m.opacity = 0.75 * (1 - p);
+        if (p >= 1) stepRingT.current = -1;
+      } else {
+        stepRingRef.current.visible = false;
+      }
+    }
+
+    // Vòng bụi khi đáp ô cuối
     if (puffRef.current) {
       const m = puffRef.current.material as THREE.MeshBasicMaterial;
       if (puffT.current >= 0) {
-        puffT.current += delta;
+        puffT.current += dt;
         const p = puffT.current / 0.45;
         puffRef.current.visible = p < 1;
         puffRef.current.scale.setScalar(0.6 + p * 1.2);
@@ -215,6 +370,21 @@ function SmoothPawn({
           depthWrite={false}
         />
       </mesh>
+      {/* Vòng sáng màu người chơi loé lên ở mỗi ô vừa nhảy qua */}
+      <mesh
+        ref={stepRingRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.05, 0]}
+        visible={false}
+      >
+        <ringGeometry args={[0.45, 0.7, 32]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0}
+          depthWrite={false}
+        />
+      </mesh>
       <mesh
         ref={puffRef}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -229,8 +399,71 @@ function SmoothPawn({
           depthWrite={false}
         />
       </mesh>
-      {/* Nhân vật to hơn để dễ nhìn từ góc camera của bàn cờ */}
-      <Pawn3D type={type} state={state} scale={PAWN_SCALE} />
+      {/* Nhân vật to hơn để dễ nhìn từ góc camera của bàn cờ.
+          Cú nhảy & co giãn do SmoothPawn điều khiển (bodyRef). */}
+      <group ref={bodyRef}>
+        <Pawn3D type={type} state={state} scale={PAWN_SCALE} />
+      </group>
+      {/* Máy bay chở nhân vật khi đi Du lịch */}
+      <group ref={planeRef} visible={false}>
+        <ToyPlane color={color} />
+      </group>
+    </group>
+  );
+}
+
+/** Máy bay đồ chơi (mũi hướng +Z), cánh & đuôi theo màu người chơi */
+function ToyPlane({ color }: { color: string }) {
+  return (
+    <group>
+      {/* Thân */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <capsuleGeometry args={[0.32, 1.1, 6, 16]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.35} />
+      </mesh>
+      {/* Sọc màu người chơi quanh thân */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -0.05]}>
+        <cylinderGeometry args={[0.335, 0.335, 0.22, 16]} />
+        <meshStandardMaterial color={color} roughness={0.4} />
+      </mesh>
+      {/* Kính buồng lái */}
+      <mesh position={[0, 0.2, 0.42]} scale={[0.75, 0.6, 1]}>
+        <sphereGeometry args={[0.24, 16, 12]} />
+        <meshStandardMaterial
+          color="#7dd3fc"
+          roughness={0.1}
+          metalness={0.2}
+        />
+      </mesh>
+      {/* Cánh chính */}
+      <mesh position={[0, -0.04, 0.05]} castShadow>
+        <boxGeometry args={[2.3, 0.07, 0.5]} />
+        <meshStandardMaterial color={color} roughness={0.4} />
+      </mesh>
+      {/* Đuôi ngang & đuôi đứng */}
+      <mesh position={[0, 0.05, -0.75]}>
+        <boxGeometry args={[0.95, 0.06, 0.28]} />
+        <meshStandardMaterial color={color} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 0.32, -0.75]}>
+        <boxGeometry args={[0.06, 0.5, 0.32]} />
+        <meshStandardMaterial color={color} roughness={0.4} />
+      </mesh>
+      {/* Mũi + cánh quạt */}
+      <mesh position={[0, 0, 0.88]}>
+        <sphereGeometry args={[0.12, 12, 10]} />
+        <meshStandardMaterial color="#fbbf24" roughness={0.3} />
+      </mesh>
+      <group name="propeller" position={[0, 0, 0.95]}>
+        <mesh>
+          <boxGeometry args={[0.9, 0.09, 0.03]} />
+          <meshStandardMaterial color="#475569" roughness={0.5} />
+        </mesh>
+        <mesh rotation={[0, 0, Math.PI / 2]}>
+          <boxGeometry args={[0.9, 0.09, 0.03]} />
+          <meshStandardMaterial color="#475569" roughness={0.5} />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -427,6 +660,58 @@ function TravelSelectableTile({
   );
 }
 
+// ---------------------------------------------------------------------------
+// CAMERA TỰ CO GIÃN THEO TỈ LỆ MÀN HÌNH
+// Bố cục gốc được thiết kế cho màn hình ngang (~1.45). Màn hình hẹp hơn (điện thoại
+// dọc, iPad dọc) sẽ lùi camera ra xa theo đúng tỉ lệ để luôn thấy trọn bề ngang bàn cờ.
+// ---------------------------------------------------------------------------
+const CAMERA_TARGET = new THREE.Vector3(0, -1.5, 0);
+const CAMERA_HOME = new THREE.Vector3(0, 22, 16);
+const CAMERA_DIR = CAMERA_HOME.clone().sub(CAMERA_TARGET).normalize();
+const CAMERA_BASE_DISTANCE = CAMERA_HOME.distanceTo(CAMERA_TARGET);
+// Màn hình hẹp hơn tỉ lệ này thì lùi camera để vừa khít bề ngang bàn cờ (~90% chiều rộng)
+const DESIGN_ASPECT = 1.12;
+const MAX_CAMERA_FACTOR = 3.3;
+
+// Điện thoại xoay ngang: chiều cao là giới hạn -> kéo camera lại gần & dời điểm nhìn
+// về phía dãy gần để bàn cờ to hơn (phần viền ngoài của đảo bị cắt bớt cũng không sao)
+const PHONE_LANDSCAPE_ZOOM = 0.84;
+const DEFAULT_TARGET: [number, number, number] = [0, -1.5, 0];
+const PHONE_LANDSCAPE_TARGET: [number, number, number] = [0, -1.5, 2.2];
+
+function ResponsiveCamera({
+  zoom,
+  target,
+}: {
+  zoom: number;
+  target: [number, number, number];
+}) {
+  const camera = useThree((s) => s.camera);
+  const getState = useThree((s) => s.get);
+  const width = useThree((s) => s.size.width);
+  const height = useThree((s) => s.size.height);
+
+  useEffect(() => {
+    if (!width || !height) return;
+    const aspect = width / height;
+    // Bề ngang nhìn thấy tỉ lệ với (khoảng cách × tỉ lệ màn hình) -> bù lại khi màn hình hẹp
+    const k = Math.min(MAX_CAMERA_FACTOR, Math.max(1, DESIGN_ASPECT / aspect));
+    const dist = CAMERA_BASE_DISTANCE * k * zoom;
+    const t = new THREE.Vector3(...target);
+    camera.position.copy(t).addScaledVector(CAMERA_DIR, dist);
+    camera.lookAt(t);
+    camera.updateProjectionMatrix();
+    // Sương mù lùi theo camera để bàn cờ không bị mờ khi camera ở xa
+    const fog = getState().scene.fog;
+    if (fog instanceof THREE.Fog) {
+      fog.near = dist + 20;
+      fog.far = dist + 85;
+    }
+  }, [camera, getState, width, height, zoom, target]);
+
+  return null;
+}
+
 /** Khung viền vàng (4 thanh) quanh một hình vuông nửa cạnh `half` */
 function GoldTrim({
   half,
@@ -466,19 +751,25 @@ function Monopoly3DScene({
   isTravelSelecting = false,
   onTileSelect,
 }: Monopoly3DSceneProps) {
+  const isCompact = useIsCompact();
+  const isPhoneLandscape = useIsPhoneLandscape();
+  const cameraTarget = isPhoneLandscape
+    ? PHONE_LANDSCAPE_TARGET
+    : DEFAULT_TARGET;
   // Các nhóm màu mà 1 người sở hữu trọn bộ (tiền thuê x2 — chỉ để hiển thị)
   const monopolyGroups = useMemo(() => getMonopolyGroups(tiles), [tiles]);
 
   return (
     <Canvas
-      style={{ width: "100vw", height: "100vh" }}
+      style={{ width: "100%", height: "100%" }}
       camera={{
         position: [0, 22, 16],
         fov: 60,
       }}
       // Giới hạn độ phân giải trên màn hình retina để giảm tải GPU
       dpr={[1, 1.5]}
-      shadows
+      // Điện thoại: tắt bóng đổ để chơi mượt hơn
+      shadows={!isCompact}
       // Không tone-mapping: màu tươi sáng kiểu đồ chơi
       flat
     >
@@ -502,13 +793,17 @@ function Monopoly3DScene({
         shadow-bias={-0.0005}
       />
 
+      <ResponsiveCamera
+        zoom={isPhoneLandscape ? PHONE_LANDSCAPE_ZOOM : 1}
+        target={cameraTarget}
+      />
       <OrbitControls
         enableRotate={false}
         enablePan={false}
         enableZoom={true}
         minDistance={15}
-        maxDistance={45}
-        target={[0, -1.5, 0]}
+        maxDistance={CAMERA_BASE_DISTANCE * MAX_CAMERA_FACTOR + 10}
+        target={cameraTarget}
       />
 
       {/* Đảo, biển, đường & xe buýt, mây */}

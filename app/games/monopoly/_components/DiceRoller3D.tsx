@@ -42,9 +42,14 @@ const ZONES = [
 
 interface DiceRoller3DProps {
   onRollComplete?: (total: number, d1?: number, d2?: number) => void;
+  /** Nhúng trong modal khác (vd. modal ở tù): bỏ khung viền & nền riêng */
+  embedded?: boolean;
 }
 
-export default function DiceRoller3D({ onRollComplete }: DiceRoller3DProps) {
+export default function DiceRoller3D({
+  onRollComplete,
+  embedded = false,
+}: DiceRoller3DProps) {
   // Kim chỉ lực được di chuyển trực tiếp qua ref (không re-render React mỗi khung hình)
   const markerTrackRef = useRef<HTMLDivElement>(null);
   const [isPressing, setIsPressing] = useState(false);
@@ -236,80 +241,89 @@ export default function DiceRoller3D({ onRollComplete }: DiceRoller3DProps) {
     <>
       <ToyKeyframes />
 
-      {/* A. KHUNG XÚC XẮC 3D Ở GIỮA MÀN HÌNH (CHỈ HIỆN KHI LẮC) */}
-      {showCenterCanvas && (
-        <div
-          className={`${toyFont.className} toy-fade pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center`}
-          style={{
-            background:
-              "radial-gradient(circle, rgba(255,240,200,0.35) 0%, rgba(16,24,56,0.55) 70%)",
-          }}
-        >
-          <div className="relative h-80 w-80">
-            <Canvas camera={{ position: [0, 4.5, 3.2], fov: 45 }} shadows>
-              <ambientLight intensity={1.3} />
-              <directionalLight
-                position={[5, 10, 5]}
-                intensity={1.8}
-                castShadow
-              />
-              <pointLight position={[-5, -2, -2]} intensity={0.5} />
+      {/* A. KHUNG XÚC XẮC 3D Ở GIỮA MÀN HÌNH
+          Canvas được tạo sẵn 1 lần (ẩn) khi tới lượt -> lúc lắc không phải khởi tạo
+          WebGL / biên dịch shader / tạo texture nữa (nguyên nhân giật khi bấm lắc).
+          Chỉ vẽ liên tục khi đang lắc; không phủ nền mờ lên bàn cờ. */}
+      <div
+        className={`${toyFont.className} pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center transition-opacity duration-150 ${
+          showCenterCanvas ? "visible opacity-100" : "invisible opacity-0"
+        }`}
+        aria-hidden={!showCenterCanvas}
+      >
+        <div className="relative h-80 w-80">
+          <Canvas
+            camera={{ position: [0, 4.5, 3.2], fov: 45 }}
+            frameloop={showCenterCanvas ? "always" : "demand"}
+            dpr={[1, 1.5]}
+            gl={{ alpha: true, powerPreference: "high-performance" }}
+          >
+            <ambientLight intensity={1.3} />
+            <directionalLight position={[5, 10, 5]} intensity={1.8} />
+            <pointLight position={[-5, -2, -2]} intensity={0.5} />
 
-              <SingleDice
-                ref={dice1Ref}
-                position={[-1.3, 0, 0]}
-                initialValue={diceValues[0]}
-                rollRequest={
-                  rollReq ? { value: rollReq.d1, id: rollReq.id } : null
-                }
-                onRollEnd={handleDiceEnd}
-              />
-              <SingleDice
-                ref={dice2Ref}
-                position={[1.3, 0, 0]}
-                initialValue={diceValues[1]}
-                rollRequest={
-                  rollReq ? { value: rollReq.d2, id: rollReq.id } : null
-                }
-                onRollEnd={handleDiceEnd}
-              />
-            </Canvas>
+            <SingleDice
+              ref={dice1Ref}
+              position={[-1.3, 0, 0]}
+              initialValue={diceValues[0]}
+              rollRequest={
+                rollReq ? { value: rollReq.d1, id: rollReq.id } : null
+              }
+              onRollEnd={handleDiceEnd}
+            />
+            <SingleDice
+              ref={dice2Ref}
+              position={[1.3, 0, 0]}
+              initialValue={diceValues[1]}
+              rollRequest={
+                rollReq ? { value: rollReq.d2, id: rollReq.id } : null
+              }
+              onRollEnd={handleDiceEnd}
+            />
+          </Canvas>
 
-            {/* Kết quả khi xúc xắc dừng */}
-            {showResultBadge && (
-              <div
-                className="toy-pop absolute left-1/2 top-0 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2 text-xl text-white"
-                style={{
-                  background: "linear-gradient(180deg,#ffc23d,#d99500)",
-                  boxShadow: "0 5px 0 #a87200, 0 10px 20px rgba(0,0,0,0.3)",
-                  textShadow: "0 2px 0 rgba(0,0,0,0.2)",
-                  border: "4px solid #fffaf0",
-                }}
-              >
-                🎲 {currentTotal} nút
-                {diceValues[0] === diceValues[1] && (
-                  <span
-                    className="rounded-full bg-white/90 px-2 text-sm text-[#d4621a]"
-                    style={{ textShadow: "none" }}
-                  >
-                    Đôi!
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Kết quả khi xúc xắc dừng */}
+          {showResultBadge && (
+            <div
+              className="toy-pop absolute left-1/2 top-0 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2 text-xl text-white"
+              style={{
+                background: "linear-gradient(180deg,#ffc23d,#d99500)",
+                boxShadow: "0 5px 0 #a87200, 0 10px 20px rgba(0,0,0,0.3)",
+                textShadow: "0 2px 0 rgba(0,0,0,0.2)",
+                border: "4px solid #fffaf0",
+              }}
+            >
+              🎲 {currentTotal} nút
+              {diceValues[0] === diceValues[1] && (
+                <span
+                  className="rounded-full bg-white/90 px-2 text-sm text-[#d4621a]"
+                  style={{ textShadow: "none" }}
+                >
+                  Đôi!
+                </span>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* B. BẢNG ĐIỀU KHIỂN NHẤN GIỮ ĐỂ TÍCH LỰC */}
       <div
-        className={`${toyFont.className} w-full select-none space-y-3 rounded-[28px] p-4 text-center`}
-        style={{
-          background: "linear-gradient(180deg,#fffaf0 0%,#fff1dc 100%)",
-          border: "5px solid #26386f",
-          boxShadow: "0 8px 0 #1b2a57, 0 18px 36px rgba(0,0,0,0.35)",
-          color: "#2b2f48",
-        }}
+        className={`${toyFont.className} w-full select-none text-center ${
+          embedded
+            ? "space-y-2.5 [@media(max-height:500px)]:space-y-2"
+            : "space-y-3 rounded-[28px] p-4"
+        }`}
+        style={
+          embedded
+            ? { color: "#2b2f48" }
+            : {
+                background: "linear-gradient(180deg,#fffaf0 0%,#fff1dc 100%)",
+                border: "5px solid #26386f",
+                boxShadow: "0 8px 0 #1b2a57, 0 18px 36px rgba(0,0,0,0.35)",
+                color: "#2b2f48",
+              }
+        }
       >
         <div
           className="text-xs uppercase tracking-[0.2em]"
@@ -394,8 +408,10 @@ export default function DiceRoller3D({ onRollComplete }: DiceRoller3DProps) {
           type="button"
           onMouseDown={handleStart}
           onTouchStart={handleStart}
+          // Điện thoại: nhấn giữ không mở menu / không bôi đen chữ
+          onContextMenu={(e) => e.preventDefault()}
           disabled={busy}
-          className="relative w-full overflow-hidden rounded-2xl py-3.5 text-lg text-white transition-transform duration-75 disabled:cursor-not-allowed"
+          className={`relative w-full overflow-hidden rounded-2xl py-3.5 text-lg text-white transition-transform duration-75 disabled:cursor-not-allowed ${embedded ? "[@media(max-height:500px)]:py-2.5 [@media(max-height:500px)]:text-base" : ""}`}
           style={{
             background: busy
               ? "linear-gradient(180deg,#c9cfdc,#9aa3b5)"
@@ -406,6 +422,10 @@ export default function DiceRoller3D({ onRollComplete }: DiceRoller3DProps) {
                 ? "0 3px 0 #8a92a6"
                 : "0 6px 0 #a84a10, 0 10px 18px rgba(0,0,0,0.2)",
             transform: isPressing ? "translateY(5px)" : "none",
+            touchAction: "none",
+            WebkitTouchCallout: "none",
+            WebkitUserSelect: "none",
+            userSelect: "none",
             textShadow: "0 2px 0 rgba(0,0,0,0.2)",
           }}
         >

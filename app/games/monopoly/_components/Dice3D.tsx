@@ -154,6 +154,8 @@ const SingleDice = forwardRef<Dice3DRef, SingleDiceProps>(
       new THREE.Vector3(1, 1, 0).normalize(),
     );
     const totalAngleRef = useRef(0);
+    /** Tái sử dụng mỗi khung hình (không tạo object mới -> giảm GC giật) */
+    const qDeltaRef = useRef(new THREE.Quaternion());
     const rollProgressRef = useRef(0);
 
     // Cập nhật vị trí mặt khi khởi tạo
@@ -261,7 +263,7 @@ const SingleDice = forwardRef<Dice3DRef, SingleDiceProps>(
       const currentAngle = totalAngleRef.current * easeOut;
 
       // Tính Quaternion xoay thêm từ điểm xuất phát
-      const qDelta = new THREE.Quaternion().setFromAxisAngle(
+      const qDelta = qDeltaRef.current.setFromAxisAngle(
         rotationAxisRef.current,
         currentAngle,
       );
@@ -284,8 +286,6 @@ const SingleDice = forwardRef<Dice3DRef, SingleDiceProps>(
         ref={meshRef}
         position={position}
         material={materials}
-        castShadow
-        receiveShadow
       >
         {/* Xúc xắc bo tròn (giữ nguyên nhóm mặt để map 6 texture) */}
         <primitive object={roundedGeometry} attach="geometry" />
