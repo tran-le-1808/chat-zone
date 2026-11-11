@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { authUrlWithRedirect, readRedirectFromLocation } from "@/lib/redirect";
 import { register } from "@/redux/features/authSlice";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { toast } from "sonner";
@@ -45,7 +46,8 @@ export default function RegisterPage() {
 
     if (register.fulfilled.match(result)) {
       toast.success("Account created successfully");
-      router.push("/login");
+      // Giữ trang cần quay lại cho bước đăng nhập
+      router.push(authUrlWithRedirect("/login", readRedirectFromLocation()));
     }
 
     if (register.rejected.match(result)) {
@@ -191,7 +193,11 @@ export default function RegisterPage() {
           <p className="pt-2 text-center text-sm text-white/40">
             Already have an account?{" "}
             <span
-              onClick={() => router.push("/login")}
+              onClick={() =>
+                router.push(
+                  authUrlWithRedirect("/login", readRedirectFromLocation()),
+                )
+              }
               className="cursor-pointer text-indigo-300 hover:text-indigo-200"
             >
               Login

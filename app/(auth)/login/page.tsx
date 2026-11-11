@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { authUrlWithRedirect, readRedirectFromLocation } from "@/lib/redirect";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -38,7 +39,8 @@ export default function LoginPage() {
     if (login.fulfilled.match(result)) {
       toast.success("Login successfully");
       dispatch(getProfile());
-      router.push("/");
+      // Quay lại trang người dùng đang mở trước khi bị đưa sang login
+      router.replace(readRedirectFromLocation());
     }
 
     if (login.rejected.match(result)) {
@@ -137,7 +139,11 @@ export default function LoginPage() {
           <p className="pt-2 text-center text-sm text-white/40">
             Don&apos;t have an account?{" "}
             <span
-              onClick={() => router.push("/register")}
+              onClick={() =>
+                router.push(
+                  authUrlWithRedirect("/register", readRedirectFromLocation()),
+                )
+              }
               className="cursor-pointer text-indigo-300 hover:text-indigo-200"
             >
               Register

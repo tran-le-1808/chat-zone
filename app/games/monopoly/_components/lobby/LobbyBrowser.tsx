@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { monoEmit, waitForSocket } from "@/lib/monopolySocket";
+import { authUrlWithRedirect } from "@/lib/redirect";
 import { useAppSelector } from "@/redux/hooks";
 import { INITIAL_PLAYERS } from "@/types/game.types";
 import {
@@ -80,7 +81,7 @@ export default function LobbyBrowser() {
             <div className="text-5xl">🔐</div>
             <p className="text-gray-300">Bạn cần đăng nhập để chơi online</p>
             <Link
-              href="/login"
+              href={authUrlWithRedirect("/login", "/games/monopoly")}
               className="inline-block rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 px-6 py-3 font-bold"
             >
               Đăng nhập

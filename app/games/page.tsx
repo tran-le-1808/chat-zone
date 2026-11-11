@@ -83,6 +83,13 @@ export default function GamesPage() {
         {/* HEADER SECTION */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
+            {/* Quay lại trang chính */}
+            <Link
+              href="/"
+              className="mb-3 inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-gray-300 transition hover:border-cyan-400/50 hover:bg-white/10 hover:text-white active:scale-95"
+            >
+              <span aria-hidden>←</span> Trang chính
+            </Link>
             <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500">
               Khu Vực Trò Chơi
             </h1>
