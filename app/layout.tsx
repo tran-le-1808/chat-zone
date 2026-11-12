@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import MainLayout from "@/components/layout/MainLayout";
 import AuthInitializer from "@/components/providers/AuthInitializer";
 import SocketProvider from "@/components/providers/SocketProvider";
+import { beVietnam } from "@/lib/fonts";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,8 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chat Zone",
-  description: "Chat Zone",
+  title: "Chat Zone — Trò chuyện & chơi game cùng bạn bè",
+  description:
+    "Nhắn tin thời gian thực, trợ lý Gemini AI, Cờ Tỷ Phú và Bida online cùng bạn bè.",
 };
 
 export default function RootLayout({
@@ -29,10 +31,12 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="vi"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body
+        className={`${beVietnam.className} flex min-h-full flex-col bg-[#0d0f1e]`}
+      >
         <ReduxProvider>
           <SocketProvider>
             <AuthInitializer />

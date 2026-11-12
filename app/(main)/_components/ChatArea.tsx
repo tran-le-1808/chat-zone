@@ -20,9 +20,25 @@ import {
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { socket } from "@/lib/socket";
 import Image from "next/image";
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Attachment, Message, MessageType } from "@/types/chat";
 import ImagePreviewModal from "./ImagePreviewModal";
+import UserAvatar from "@/components/ui/UserAvatar";
+import DongSonDrum from "@/components/ui/DongSonDrum";
+import { clockVi, dayLabelVi } from "@/lib/timeVi";
+import {
+  ArrowLeft,
+  Bot,
+  Download,
+  FileText,
+  Info,
+  Loader2,
+  Paperclip,
+  SendHorizontal,
+  Video,
+  X,
+} from "lucide-react";
+import { mediaUrl } from "@/lib/mediaUrl";
 
 interface ChatAreaProps {
   messages: AIMessage[] | Message[];
@@ -30,6 +46,10 @@ interface ChatAreaProps {
   nextCursor: string | null;
   loadingMoreMessages: boolean;
   isAI: boolean;
+  /** Điện thoại: quay lại danh sách hội thoại */
+  onBack?: () => void;
+  /** Mở bảng thông tin hội thoại (màn hình nhỏ hơn xl) */
+  onOpenInfo?: () => void;
 }
 
 export default function ChatArea({
@@ -38,6 +58,8 @@ export default function ChatArea({
   nextCursor,
   loadingMoreMessages,
   isAI,
+  onBack,
+  onOpenInfo,
 }: ChatAreaProps) {
   const dispatch = useAppDispatch();
 
@@ -75,6 +97,16 @@ export default function ChatArea({
   const [images, setImages] = useState<File[]>([]);
   const [videos, setVideos] = useState<File[]>([]);
   const [files, setFiles] = useState<File[]>([]);
+
+  // URL xem trước ảnh: tạo 1 lần cho mỗi ảnh & giải phóng khi đổi (tránh rò bộ nhớ)
+  const imagePreviews = useMemo(
+    () => images.map((image) => URL.createObjectURL(image)),
+    [images],
+  );
+  useEffect(
+    () => () => imagePreviews.forEach((url) => URL.revokeObjectURL(url)),
+    [imagePreviews],
+  );
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -214,12 +246,10 @@ export default function ChatArea({
     const allImages =
       message.attachments
         ?.filter((item: Attachment) => item.type.startsWith("image"))
-        .map(
-          (item: Attachment) => `${process.env.NEXT_PUBLIC_API_URL}${item.url}`,
-        ) || [];
+        .map((item: Attachment) => mediaUrl(item.url)) || [];
 
     const clickedIndex = allImages.findIndex(
-      (img) => img === `${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`,
+      (img) => img === mediaUrl(attachment.url),
     );
 
     setPreviewImages(allImages);
@@ -347,216 +377,392 @@ export default function ChatArea({
     }
   };
 
+  // Tên hiển thị giống Sidebar: nhóm -> tên nhóm, 1-1 -> tên người đang chat cùng
+  const chatPartner = selectedConversation?.isGroup
+    ? null
+    : selectedConversation?.participants?.find((p) => p._id !== user?._id);
+  const chatTitle = selectedConversation?.isGroup
+    ? selectedConversation.groupName
+    : (chatPartner?.name ?? selectedConversation?.groupName);
+  const partnerOnline = chatPartner
+    ? onlineUsers.includes(chatPartner._id)
+    : isOnline;
+
+  // Tên người gửi trong nhóm
+  const senderNames = new Map(
+    (selectedConversation?.participants ?? []).map((p) => [p._id, p.name]),
+  );
+
+  const hasConversation = isAI
+    ? !!selectedAiConversation
+    : !!selectedConversation;
+  const removeAt = <T,>(list: T[], index: number) =>
+    list.filter((_, i) => i !== index);
+
+  const statusText = isAI
+    ? "Luôn sẵn sàng hỗ trợ"
+    : selectedConversation?.isGroup
+      ? `${selectedConversation.participants?.length ?? 0} thành viên`
+      : partnerOnline
+        ? "Đang hoạt động"
+        : "Ngoại tuyến";
+
   return (
-    <div className="flex flex-col bg-[#262a40] w-full xl:max-w-[calc(100vw-640px)]">
-      {/* TOP HEADER */}
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 md:px-8 md:py-5">
-        <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-lg font-bold text-white">
-            {isAI ? "🤖" : selectedConversation?.groupName?.charAt(0) || "U"}
-          </div>
-
-          <div>
-            <h2 className="text-lg font-semibold text-white">
+    <div className="flex h-full w-full min-w-0 flex-col bg-[#0f1126]/70">
+      {/* THANH TIÊU ĐỀ */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#11132a]/80 px-2 py-2.5 backdrop-blur-md sm:px-5 sm:py-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label="Quay lại danh sách"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white md:hidden"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          )}
+          {isAI ? (
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#0f766e] to-[#2dd4bf] shadow-[0_0_16px_rgba(45,212,191,0.4)]">
+              <Bot className="h-6 w-6" />
+            </div>
+          ) : (
+            <UserAvatar
+              name={chatTitle}
+              src={
+                selectedConversation?.isGroup
+                  ? selectedConversation.groupAvatar
+                  : chatPartner?.avatar
+              }
+              size={44}
+              online={selectedConversation?.isGroup ? undefined : partnerOnline}
+              ringClassName="border-[#11132a]"
+            />
+          )}
+          <div className="min-w-0">
+            <h2 className="truncate font-bold leading-tight sm:text-lg">
               {isAI
-                ? selectedAiConversation?.title || "AI Assistant"
-                : selectedConversation?.groupName}
+                ? selectedAiConversation?.title || "Gemini AI"
+                : chatTitle || "Cuộc trò chuyện"}
             </h2>
-
             <p
-              className={`text-sm ${
+              className={`flex items-center gap-1.5 truncate text-xs sm:text-sm ${
                 isAI
-                  ? "text-cyan-400"
-                  : isOnline
-                    ? "text-green-400"
-                    : "text-gray-400"
+                  ? "text-teal-300"
+                  : partnerOnline && !selectedConversation?.isGroup
+                    ? "text-emerald-400"
+                    : "text-slate-400"
               }`}
             >
-              {isAI ? "Always active" : isOnline ? "Online" : "Offline"}
+              {(isAI || (partnerOnline && !selectedConversation?.isGroup)) && (
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+              )}
+              {statusText}
             </p>
           </div>
         </div>
+
+        {onOpenInfo && hasConversation && (
+          <button
+            type="button"
+            onClick={onOpenInfo}
+            aria-label="Thông tin cuộc trò chuyện"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-[#ffd166] xl:hidden"
+          >
+            <Info className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
-      {/* MESSAGES LIST */}
+      {/* DANH SÁCH TIN NHẮN */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 space-y-6 overflow-y-auto p-4 md:p-8 pb-0 md:pb-0"
+        className="flex-1 overflow-y-auto px-3 py-4 sm:px-6"
       >
         {loadingMoreMessages && (
-          <div className="py-2 text-center text-sm text-gray-400">
-            Loading older messages...
+          <div className="flex items-center justify-center gap-2 py-2 text-sm text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Đang tải tin nhắn cũ…
           </div>
         )}
-        {messages.map((message) => {
-          const isMe = message.senderId === user?._id;
 
-          return (
-            <div
-              key={message._id}
-              className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[85%] rounded-3xl px-3 py-2 text-white ${
-                  isMe ? "bg-blue-800" : "bg-[#323751]"
-                }`}
-              >
-                {/* TEXT */}
-                {message.text && (
-                  <p className="whitespace-pre-wrap">{message.text}</p>
+        {messages.length === 0 && !streamingMessage && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <DongSonDrum className="h-32 w-32 text-[#f4b942]/30" />
+            <p className="text-lg font-bold text-white/90">
+              {isAI
+                ? "Gemini AI sẵn sàng trò chuyện"
+                : hasConversation
+                  ? "Chưa có tin nhắn nào"
+                  : "Chọn một cuộc trò chuyện"}
+            </p>
+            <p className="max-w-xs text-sm text-slate-400">
+              {isAI
+                ? "Hỏi bất cứ điều gì: học tập, công việc hay một câu đố vui."
+                : hasConversation
+                  ? "Hãy gửi lời chào đầu tiên để bắt đầu nhé!"
+                  : "Bắt đầu trò chuyện cùng bạn bè hoặc tạo nhóm mới."}
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          {messages.map((message, index) => {
+            const isMe = message.senderId === user?._id;
+            const prev = messages[index - 1];
+            const next = messages[index + 1];
+            const newDay =
+              !prev ||
+              new Date(prev.createdAt).toDateString() !==
+                new Date(message.createdAt).toDateString();
+            const firstOfGroup = newDay || prev?.senderId !== message.senderId;
+            const lastOfGroup =
+              !next ||
+              next.senderId !== message.senderId ||
+              new Date(next.createdAt).toDateString() !==
+                new Date(message.createdAt).toDateString();
+            const showSender =
+              !isMe && !isAI && selectedConversation?.isGroup && firstOfGroup;
+            const senderName = senderNames.get(message.senderId);
+
+            return (
+              <div key={message._id}>
+                {newDay && (
+                  <div className="my-4 flex items-center gap-3 text-[11px] font-semibold text-slate-500">
+                    <span className="h-px flex-1 bg-white/10" />
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1">
+                      {dayLabelVi(message.createdAt)}
+                    </span>
+                    <span className="h-px flex-1 bg-white/10" />
+                  </div>
                 )}
 
-                {/* ATTACHMENTS */}
-                {!!message.attachments?.length && (
-                  <div className="gap-2 flex flex-wrap items-center mt-2">
-                    {message.attachments.map(
-                      (attachment: Attachment, index: number) => {
-                        if (attachment.type.startsWith("image")) {
-                          const fileUrl = `${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`;
-                          return (
-                            <div
-                              className="relative h-20 w-20 overflow-hidden rounded-lg"
-                              key={index}
-                            >
-                              <Image
-                                src={fileUrl}
-                                alt={attachment.name || "image"}
-                                fill
-                                className="cursor-pointer object-cover shadow hover:opacity-80"
-                                unoptimized
-                                onClick={() =>
-                                  onClickImage(message, attachment)
-                                }
-                              />
-                            </div>
-                          );
-                        }
+                <div
+                  className={`flex items-end gap-2 ${isMe ? "justify-end" : "justify-start"} ${firstOfGroup ? "mt-3" : ""}`}
+                >
+                  {/* Avatar người gửi (tin cuối của cụm) */}
+                  {!isMe && (
+                    <div className="w-8 shrink-0">
+                      {lastOfGroup &&
+                        (isAI ? (
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-linear-to-br from-[#0f766e] to-[#2dd4bf]">
+                            <Bot className="h-4 w-4" />
+                          </div>
+                        ) : (
+                          <UserAvatar
+                            name={senderName || chatTitle}
+                            src={
+                              selectedConversation?.participants?.find(
+                                (p) => p._id === message.senderId,
+                              )?.avatar
+                            }
+                            size={32}
+                          />
+                        ))}
+                    </div>
+                  )}
 
-                        if (attachment.type.startsWith("video")) {
-                          return (
-                            <video
-                              key={index}
-                              controls
-                              className="max-w-full rounded-2xl hover:opacity-80"
-                            >
-                              <source
-                                src={`${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`}
-                                type={attachment.type}
-                              />
-                            </video>
-                          );
-                        }
+                  <div
+                    className={`flex max-w-[80%] flex-col sm:max-w-[70%] ${isMe ? "items-end" : "items-start"}`}
+                  >
+                    {showSender && senderName && (
+                      <span className="mb-1 ml-3 text-xs font-semibold text-[#ffd166]">
+                        {senderName}
+                      </span>
+                    )}
+                    <div
+                      className={`rounded-2xl px-3.5 py-2 text-[15px] leading-relaxed shadow-sm ${
+                        isMe
+                          ? `bg-linear-to-br from-[#c81d25] to-[#e8772e] text-white ${lastOfGroup ? "rounded-br-md" : ""}`
+                          : isAI
+                            ? `border border-teal-400/20 bg-[#13283a] text-teal-50 ${lastOfGroup ? "rounded-bl-md" : ""}`
+                            : `border border-white/5 bg-[#1c1f3a] text-slate-100 ${lastOfGroup ? "rounded-bl-md" : ""}`
+                      }`}
+                    >
+                      {message.text && (
+                        <p className="whitespace-pre-wrap break-words">
+                          {message.text}
+                        </p>
+                      )}
 
-                        return (
-                          <a
-                            key={index}
-                            href={`${process.env.NEXT_PUBLIC_API_URL}${attachment.url}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-xl bg-white/10 p-3 text-sm hover:opacity-80 flex items-center"
-                          >
-                            📄 {attachment.name}
-                          </a>
-                        );
-                      },
+                      {!!message.attachments?.length && (
+                        <div
+                          className={`flex flex-wrap items-center gap-2 ${message.text ? "mt-2" : ""}`}
+                        >
+                          {message.attachments.map(
+                            (attachment: Attachment, i: number) => {
+                              const fileUrl = mediaUrl(attachment.url);
+                              if (attachment.type.startsWith("image")) {
+                                return (
+                                  <button
+                                    type="button"
+                                    key={i}
+                                    onClick={() =>
+                                      onClickImage(message, attachment)
+                                    }
+                                    className="relative h-28 w-28 overflow-hidden rounded-xl ring-1 ring-white/10 transition hover:opacity-85 sm:h-32 sm:w-32"
+                                  >
+                                    <Image
+                                      src={fileUrl}
+                                      alt={attachment.name || "Hình ảnh"}
+                                      fill
+                                      className="object-cover"
+                                      unoptimized
+                                    />
+                                  </button>
+                                );
+                              }
+                              if (attachment.type.startsWith("video")) {
+                                return (
+                                  <video
+                                    key={i}
+                                    controls
+                                    className="max-h-64 max-w-full rounded-xl"
+                                  >
+                                    <source
+                                      src={fileUrl}
+                                      type={attachment.type}
+                                    />
+                                  </video>
+                                );
+                              }
+                              return (
+                                <a
+                                  key={i}
+                                  href={fileUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="flex max-w-full items-center gap-2 rounded-xl bg-black/20 px-3 py-2 text-sm transition hover:bg-black/30"
+                                >
+                                  <FileText className="h-5 w-5 shrink-0 text-[#ffd166]" />
+                                  <span className="truncate">
+                                    {attachment.name}
+                                  </span>
+                                  <Download className="h-4 w-4 shrink-0 opacity-70" />
+                                </a>
+                              );
+                            },
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {lastOfGroup && (
+                      <span className="mt-1 px-1 text-[10px] text-slate-500">
+                        {clockVi(message.createdAt)}
+                      </span>
                     )}
                   </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* AI ĐANG TRẢ LỜI */}
+          {isAI && streamingConversationId === activeConversationId && (
+            <div className="mt-3 flex items-end gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-[#0f766e] to-[#2dd4bf]">
+                <Bot className="h-4 w-4" />
+              </div>
+              <div className="max-w-[80%] rounded-2xl rounded-bl-md border border-teal-400/20 bg-[#13283a] px-3.5 py-2 text-[15px] text-teal-50 sm:max-w-[70%]">
+                {streamingMessage ? (
+                  <p className="whitespace-pre-wrap break-words">
+                    {streamingMessage}
+                    <span className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-teal-300 align-middle" />
+                  </p>
+                ) : (
+                  <span className="flex gap-1 py-1.5">
+                    {[0, 150, 300].map((d) => (
+                      <span
+                        key={d}
+                        className="h-2 w-2 animate-bounce rounded-full bg-teal-300"
+                        style={{ animationDelay: `${d}ms` }}
+                      />
+                    ))}
+                  </span>
                 )}
               </div>
             </div>
-          );
-        })}
-
-        {/* STREAMING AI MESSAGE */}
-        {isAI && streamingConversationId === activeConversationId && (
-          <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-3xl bg-[#323751] px-4 py-3 text-white">
-              <p className="whitespace-pre-wrap">
-                {streamingMessage}
-                <span className="inline-block w-2 h-4 ml-1 bg-cyan-400 animate-pulse" />
-              </p>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <div ref={bottomRef} />
       </div>
 
-      {/* PREVIEW ATTACHMENTS */}
-      {!!images.length && (
-        <div className="overflow-x-auto px-4 py-3">
-          <div className="flex gap-2 w-max">
-            {images.map((image, index) => {
-              const previewUrl = URL.createObjectURL(image);
-
-              return (
-                <div
-                  key={index}
-                  className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-white/10"
+      {/* TỆP ĐÍNH KÈM CHỜ GỬI */}
+      {(!!images.length || !!videos.length || !!files.length) && (
+        <div className="shrink-0 overflow-x-auto border-t border-white/10 px-3 py-2.5">
+          <div className="flex w-max gap-2">
+            {images.map((image, index) => (
+              <div
+                key={`i${index}`}
+                className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10"
+              >
+                <Image
+                  width={80}
+                  height={80}
+                  src={imagePreviews[index]}
+                  alt={image.name}
+                  className="h-full w-full object-cover"
+                  unoptimized
+                />
+                <button
+                  type="button"
+                  aria-label={`Bỏ ${image.name}`}
+                  onClick={() => setImages((prev) => removeAt(prev, index))}
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 hover:bg-[#c81d25]"
                 >
-                  <Image
-                    width={40}
-                    height={40}
-                    src={previewUrl}
-                    alt={image.name}
-                    className="h-full w-full object-cover"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImages((prev) =>
-                        prev.filter((_, itemIndex) => itemIndex !== index),
-                      );
-                    }}
-                    className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs text-white hover:opacity-80"
-                  >
-                    ✕
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {!!videos.length && (
-        <div className="overflow-x-auto px-4 py-2">
-          <div className="flex gap-2 w-max">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
             {videos.map((video, index) => (
               <div
-                key={index}
-                className="rounded-lg bg-[#323751] px-3 py-2 text-sm text-white"
+                key={`v${index}`}
+                className="flex h-20 max-w-[200px] items-center gap-2 rounded-xl bg-white/[0.05] px-3 text-sm ring-1 ring-white/10"
               >
-                🎥 {video.name}
+                <Video className="h-5 w-5 shrink-0 text-[#ffd166]" />
+                <span className="truncate">{video.name}</span>
+                <button
+                  type="button"
+                  aria-label={`Bỏ ${video.name}`}
+                  onClick={() => setVideos((prev) => removeAt(prev, index))}
+                  className="shrink-0 rounded-full p-1 hover:bg-white/10"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {!!files.length && (
-        <div className="overflow-x-auto px-4 py-2">
-          <div className="flex gap-2 w-max">
             {files.map((file, index) => (
               <div
-                key={index}
-                className="rounded-lg bg-[#323751] px-3 py-2 text-sm text-white"
+                key={`f${index}`}
+                className="flex h-20 max-w-[200px] items-center gap-2 rounded-xl bg-white/[0.05] px-3 text-sm ring-1 ring-white/10"
               >
-                📄 {file.name}
+                <FileText className="h-5 w-5 shrink-0 text-[#ffd166]" />
+                <span className="truncate">{file.name}</span>
+                <button
+                  type="button"
+                  aria-label={`Bỏ ${file.name}`}
+                  onClick={() => setFiles((prev) => removeAt(prev, index))}
+                  className="shrink-0 rounded-full p-1 hover:bg-white/10"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* INPUT CONTROLS */}
-      <div className="border-t border-white/10 p-4">
-        <div className="flex items-center gap-3">
+      {/* Ô NHẬP TIN NHẮN */}
+      <div className="shrink-0 border-t border-white/10 bg-[#11132a]/80 p-2.5 pb-[max(10px,env(safe-area-inset-bottom))] backdrop-blur-md sm:p-4">
+        <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5 transition focus-within:border-[#f4b942]/50 focus-within:shadow-[0_0_0_3px_rgba(244,185,66,0.1)]">
           {!isAI && (
-            <label className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-2xl bg-[#323751] text-2xl text-white">
-              +
+            <label
+              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-[#ffd166]"
+              title="Đính kèm ảnh, video hoặc tệp"
+            >
+              <Paperclip className="h-5 w-5" />
               <input
                 type="file"
                 multiple
@@ -569,6 +775,7 @@ export default function ChatArea({
 
           <input
             value={text}
+            disabled={!hasConversation}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (activeSending) return;
@@ -581,45 +788,23 @@ export default function ChatArea({
                 handleSend();
               }
             }}
-            placeholder={isAI ? "Ask AI anything..." : "Type something..."}
-            className="flex-1 rounded-2xl border border-cyan-400 bg-[#2b2f46] px-4 py-3 text-white outline-none"
+            placeholder={
+              isAI ? "Hỏi Gemini AI bất cứ điều gì…" : "Nhập tin nhắn…"
+            }
+            className="min-w-0 flex-1 bg-transparent px-2 py-2 text-[15px] text-white outline-none placeholder:text-slate-500 disabled:opacity-50"
           />
 
           <button
-            disabled={activeSending}
+            type="button"
+            disabled={activeSending || !hasConversation}
             onClick={handleSend}
-            className="flex items-center justify-center rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 p-3.5 text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Gửi tin nhắn"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-[#c81d25] to-[#e8772e] text-white shadow-[0_3px_0_#7f1118] transition hover:brightness-110 active:translate-y-[2px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
           >
             {activeSending ? (
-              <svg
-                className="h-5 w-5 animate-spin text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
+              <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="h-5 w-5"
-              >
-                <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12L2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
-              </svg>
+              <SendHorizontal className="h-5 w-5" />
             )}
           </button>
         </div>

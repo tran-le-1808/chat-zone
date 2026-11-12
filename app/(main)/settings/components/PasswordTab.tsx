@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { KeyRound, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { changePassword } from "@/redux/features/userSlice";
+import IconInput from "@/components/ui/IconInput";
+import { ui } from "@/components/ui/styles";
 
 interface PasswordTabProps {
   onError: (msg: string) => void;
@@ -35,51 +38,48 @@ export default function PasswordTab({ onError }: PasswordTabProps) {
 
   return (
     <form onSubmit={handleChangePassword} className="space-y-5">
-      <div>
-        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-          Mật khẩu cũ
-        </label>
-        <input
-          type="password"
-          value={oldPassword}
-          onChange={(e) => setOldPassword(e.target.value)}
-          required
-          className="w-full rounded-2xl border border-white/10 bg-[#2b2f46] px-4 py-3 text-white focus:border-cyan-400 outline-none"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-          Mật khẩu mới
-        </label>
-        <input
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          required
-          className="w-full rounded-2xl border border-white/10 bg-[#2b2f46] px-4 py-3 text-white focus:border-cyan-400 outline-none"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-semibold text-gray-400 uppercase mb-2">
-          Xác nhận mật khẩu mới
-        </label>
-        <input
-          type="password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          required
-          className="w-full rounded-2xl border border-white/10 bg-[#2b2f46] px-4 py-3 text-white focus:border-cyan-400 outline-none"
-        />
-      </div>
+      <IconInput
+        label="Mật khẩu hiện tại"
+        icon={Lock}
+        type="password"
+        name="oldPassword"
+        autoComplete="current-password"
+        value={oldPassword}
+        onChange={(e) => setOldPassword(e.target.value)}
+        required
+      />
+      <IconInput
+        label="Mật khẩu mới"
+        icon={KeyRound}
+        type="password"
+        name="newPassword"
+        autoComplete="new-password"
+        value={newPassword}
+        onChange={(e) => setNewPassword(e.target.value)}
+        required
+      />
+      <IconInput
+        label="Xác nhận mật khẩu mới"
+        icon={ShieldCheck}
+        type="password"
+        name="confirmPassword"
+        autoComplete="new-password"
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
+        required
+      />
 
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 py-3.5 font-semibold text-white hover:opacity-90 transition active:scale-98 disabled:opacity-50"
+        className={`${ui.btnPrimary} w-full`}
       >
-        {loading ? "Đang xử lý..." : "Cập nhật mật khẩu"}
+        {loading ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : (
+          <ShieldCheck className="h-5 w-5" />
+        )}
+        {loading ? "Đang xử lý…" : "Cập nhật mật khẩu"}
       </button>
     </form>
   );

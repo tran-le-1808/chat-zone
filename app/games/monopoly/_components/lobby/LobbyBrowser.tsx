@@ -1,9 +1,21 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import {
+  ArrowLeft,
+  Dices,
+  DoorOpen,
+  Globe,
+  KeyRound,
+  LogIn,
+  Plus,
+  RefreshCw,
+  Users,
+} from "lucide-react";
+import { ui } from "@/components/ui/styles";
 import { monoEmit, waitForSocket } from "@/lib/monopolySocket";
 import { authUrlWithRedirect } from "@/lib/redirect";
 import { useAppSelector } from "@/redux/hooks";
@@ -73,18 +85,18 @@ export default function LobbyBrowser() {
 
   if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#1a1c2b] p-4 text-white">
+      <div className="flex min-h-full items-center justify-center px-4 py-20 text-white">
         {loading ? (
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#f4b942] border-t-transparent" />
         ) : (
-          <div className="space-y-4 text-center">
+          <div className={`space-y-4 px-8 py-10 text-center ${ui.card}`}>
             <div className="text-5xl">🔐</div>
-            <p className="text-gray-300">Bạn cần đăng nhập để chơi online</p>
+            <p className="text-slate-300">Bạn cần đăng nhập để chơi online</p>
             <Link
               href={authUrlWithRedirect("/login", "/games/monopoly")}
-              className="inline-block rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 px-6 py-3 font-bold"
+              className={ui.btnPrimary}
             >
-              Đăng nhập
+              <LogIn className="h-5 w-5" /> Đăng nhập
             </Link>
           </div>
         )}
@@ -93,29 +105,32 @@ export default function LobbyBrowser() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1c2b] p-4 text-white md:p-10">
-      <div className="mx-auto max-w-5xl space-y-6">
+    <div className="min-h-full px-3 py-5 text-white sm:px-6 md:p-10">
+      <div className="mx-auto max-w-5xl space-y-5 sm:space-y-6">
         {/* HEADER */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <Link
               href="/games"
-              className="text-xs text-gray-400 hover:text-white"
+              className={`${ui.btnGhost} -ml-2 px-3! py-1.5! text-sm`}
             >
-              ← Khu vực trò chơi
+              <ArrowLeft className="h-4 w-4" /> Khu vực trò chơi
             </Link>
-            <h1 className="mt-1 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-3xl font-extrabold text-transparent">
-              🎩 Cờ Tỷ Phú Online
+            <h1 className="mt-2 flex items-center gap-3 text-2xl font-extrabold sm:text-3xl">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#c81d25] to-[#e8772e] shadow-[0_4px_0_#7f1118]">
+                <Dices className="h-6 w-6" />
+              </span>
+              <span className={ui.goldText}>Cờ Tỷ Phú Online</span>
             </h1>
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-2 text-sm text-slate-400">
               Tạo phòng, mời bạn bè bằng mã và cùng nhau trở thành tỷ phú (2 - 4
               người)
             </p>
           </div>
-          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#262a40] px-4 py-2">
+          <div className="flex items-center gap-3 self-start rounded-2xl border border-[#f4b942]/20 bg-[#11132a]/85 px-4 py-2 md:self-auto">
             <PlayerAvatar name={user.name} avatar={user.avatar} size={36} />
             <div className="text-sm">
-              <div className="text-xs text-gray-400">Chơi với tên</div>
+              <div className="text-xs text-slate-400">Chơi với tên</div>
               <div className="font-bold">{user.name}</div>
             </div>
           </div>
@@ -123,10 +138,10 @@ export default function LobbyBrowser() {
 
         {/* ĐANG Ở PHÒNG KHÁC */}
         {myRoom && (
-          <div className="flex flex-col gap-3 rounded-3xl border border-amber-400/40 bg-amber-500/10 p-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 rounded-3xl border border-[#f4b942]/40 bg-[#f4b942]/10 p-4 md:flex-row md:items-center md:justify-between">
             <div className="text-sm">
               Bạn đang ở phòng{" "}
-              <span className="font-mono font-bold tracking-widest text-amber-300">
+              <span className="font-mono font-bold tracking-widest text-[#ffd166]">
                 {myRoom.code}
               </span>{" "}
               ({myRoom.status === "playing" ? "đang chơi" : "đang chờ"})
@@ -134,7 +149,7 @@ export default function LobbyBrowser() {
             <div className="flex gap-2">
               <Link
                 href={`/games/monopoly/room/${myRoom.code}`}
-                className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-slate-900"
+                className={`${ui.btnPrimary} flex-1 px-4! py-2! text-sm md:flex-none`}
               >
                 Quay lại phòng
               </Link>
@@ -143,7 +158,7 @@ export default function LobbyBrowser() {
                   await monoEmit("mono:leave");
                   void refresh();
                 }}
-                className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold"
+                className={`${ui.btnGhost} flex-1 border border-white/10 px-4! py-2! text-sm md:flex-none`}
               >
                 Rời phòng
               </button>
@@ -153,18 +168,21 @@ export default function LobbyBrowser() {
 
         {/* CREATE / JOIN */}
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-3 rounded-3xl border border-white/10 bg-[#262a40] p-6">
-            <h2 className="text-lg font-bold">🏠 Tạo phòng mới</h2>
-            <p className="text-sm text-gray-400">
+          <div className={`space-y-3 p-5 sm:p-6 ${ui.card}`}>
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Plus className="h-5 w-5 text-[#f4b942]" /> Tạo phòng mới
+            </h2>
+            <p className="text-sm text-slate-400">
               Bạn sẽ là chủ phòng: mời bạn bè bằng mã, chỉnh luật chơi và kick
               người chơi.
             </p>
             <button
               disabled={busy}
               onClick={() => void createRoom()}
-              className="w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 py-3 font-bold transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+              className={`${ui.btnPrimary} w-full`}
             >
-              {busy ? "Đang tạo..." : "Tạo phòng"}
+              <DoorOpen className="h-5 w-5" />
+              {busy ? "Đang tạo…" : "Tạo phòng"}
             </button>
           </div>
 
@@ -173,9 +191,11 @@ export default function LobbyBrowser() {
               e.preventDefault();
               joinByCode(code);
             }}
-            className="space-y-3 rounded-3xl border border-white/10 bg-[#262a40] p-6"
+            className={`space-y-3 p-5 sm:p-6 ${ui.card}`}
           >
-            <h2 className="text-lg font-bold">🔑 Vào phòng bằng mã</h2>
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <KeyRound className="h-5 w-5 text-[#f4b942]" /> Vào phòng bằng mã
+            </h2>
             <input
               value={code}
               onChange={(e) =>
@@ -187,12 +207,12 @@ export default function LobbyBrowser() {
                 )
               }
               placeholder="VD: K7M2QX"
-              className="w-full rounded-2xl border border-cyan-400/60 bg-[#1d2032] px-4 py-3 text-center font-mono text-2xl tracking-[0.4em] outline-none placeholder:text-base placeholder:tracking-normal placeholder:text-gray-500"
+              className="w-full rounded-2xl border border-[#f4b942]/40 bg-white/[0.04] px-4 py-3 text-center font-mono text-xl tracking-[0.35em] text-[#ffd166] outline-none transition focus:border-[#f4b942] focus:shadow-[0_0_0_3px_rgba(244,185,66,0.12)] sm:text-2xl placeholder:text-base placeholder:tracking-normal placeholder:text-slate-500"
             />
             <button
               type="submit"
               disabled={code.length !== CODE_LENGTH}
-              className="w-full rounded-2xl bg-white/10 py-3 font-bold transition hover:bg-white/20 disabled:opacity-40"
+              className={`${ui.btnGold} w-full disabled:cursor-not-allowed disabled:opacity-40 disabled:active:translate-y-0`}
             >
               Vào phòng
             </button>
@@ -200,19 +220,24 @@ export default function LobbyBrowser() {
         </div>
 
         {/* PUBLIC ROOMS */}
-        <div className="rounded-3xl border border-white/10 bg-[#262a40] p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold">🌐 Phòng đang chờ người chơi</h2>
+        <div className={`p-5 sm:p-6 ${ui.card}`}>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Globe className="h-5 w-5 text-[#f4b942]" /> Phòng đang chờ
+            </h2>
             <button
               onClick={() => void refresh()}
-              className="rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20"
+              className={`${ui.btnGhost} border border-white/10 px-3! py-1.5! text-xs`}
             >
-              {refreshing ? "Đang tải..." : "🔄 Làm mới"}
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
+              />
+              Làm mới
             </button>
           </div>
 
           {rooms.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-500">
+            <p className="py-8 text-center text-sm text-slate-500">
               Chưa có phòng công khai nào. Hãy tạo phòng đầu tiên! 🎲
             </p>
           ) : (
@@ -222,13 +247,13 @@ export default function LobbyBrowser() {
                 return (
                   <div
                     key={r.code}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#1d2032] p-4"
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-[#f4b942]/40"
                   >
                     <div className="min-w-0">
                       <div className="truncate font-bold">
                         Phòng của {host?.name ?? "?"}
                       </div>
-                      <div className="mt-0.5 text-xs text-gray-400">
+                      <div className="mt-0.5 text-xs text-slate-400">
                         <span className="font-mono">{r.code}</span> · $
                         {r.settings.startingMoney.toLocaleString()}
                       </div>
@@ -245,12 +270,13 @@ export default function LobbyBrowser() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                      <span className="text-xs text-gray-400">
+                      <span className="flex items-center gap-1 text-xs text-slate-400">
+                        <Users className="h-3.5 w-3.5" />
                         {r.players.length}/{MONOPOLY_MAX_PLAYERS}
                       </span>
                       <button
                         onClick={() => joinByCode(r.code)}
-                        className="rounded-xl bg-gradient-to-r from-cyan-400 to-purple-500 px-4 py-2 text-sm font-bold"
+                        className={`${ui.btnPrimary} px-4! py-2! text-sm`}
                       >
                         Vào
                       </button>

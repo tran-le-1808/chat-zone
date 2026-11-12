@@ -2,15 +2,27 @@
 
 import { logout } from "@/redux/features/authSlice";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import {
+  Gamepad2,
+  LogOut,
+  MessagesSquare,
+  Settings,
+  Sparkles,
+} from "lucide-react";
+import DongSonDrum from "@/components/ui/DongSonDrum";
+import UserAvatar from "@/components/ui/UserAvatar";
+
+const NAV_ITEMS = [
+  { name: "Trò chuyện", href: "/", icon: MessagesSquare },
+  { name: "Trò chơi", href: "/games", icon: Gamepad2 },
+];
 
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const dispatch = useAppDispatch();
-
   const { user } = useAppSelector((state) => state.auth);
 
   const handleLogout = () => {
@@ -18,77 +30,90 @@ export default function Header() {
     router.push("/login");
   };
 
-  const navItems = [{ name: "Trò Chơi", href: "/games", icon: "🎮" }];
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#1f2235] px-6 py-4 shadow-lg backdrop-blur-xl">
-      <div className="flex items-center justify-between">
-        {/* LEFT */}
-        <Link href="/" className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-r from-cyan-400 to-purple-500 text-2xl text-white shadow-lg">
-            💬
-          </div>
+    <header className="relative z-40 shrink-0 border-b border-[#f4b942]/15 bg-[#0d0f1e]/85 backdrop-blur-xl">
+      {/* Viền vàng kim mảnh phía dưới */}
+      <div className="absolute inset-x-0 bottom-0 h-px bg-linear-to-r from-transparent via-[#f4b942]/50 to-transparent" />
 
-          <div>
-            <h1 className="bg-linear-to-r from-cyan-400 to-purple-400 bg-clip-text text-3xl font-bold text-transparent">
+      <div className="flex h-14 items-center justify-between gap-3 px-3 sm:h-16 sm:px-5">
+        {/* LOGO */}
+        <Link href="/" className="group flex min-w-0 items-center gap-2.5">
+          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-linear-to-br from-[#c81d25] to-[#f4b942] shadow-[0_0_18px_rgba(244,185,66,0.35)] transition group-hover:scale-105 sm:h-11 sm:w-11">
+            <DongSonDrum className="absolute h-[140%] w-[140%] text-white/25 transition-transform duration-700 group-hover:rotate-45" />
+            <MessagesSquare
+              className="relative h-5 w-5 text-white"
+              strokeWidth={2.4}
+            />
+          </div>
+          <div className="min-w-0">
+            <h1 className="bg-linear-to-r from-[#ffd166] via-[#f4b942] to-[#ff6b4a] bg-clip-text text-lg font-extrabold leading-tight tracking-tight text-transparent sm:text-xl">
               Chat Zone
             </h1>
-
-            <p className="text-sm text-gray-400">Welcome back 👋</p>
+            <p className="hidden items-center gap-1 truncate text-xs text-slate-400 sm:flex">
+              <Sparkles className="h-3 w-3 text-[#f4b942]" />
+              Xin chào, {user?.name || "bạn"}!
+            </p>
           </div>
         </Link>
 
-        {/* CENTER - NAVIGATION MENU */}
-        <nav className="hidden items-center gap-2 md:flex">
-          {navItems.map((item) => {
-            const isActive = pathname.startsWith(item.href);
+        {/* ĐIỀU HƯỚNG */}
+        <nav className="flex items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+          {NAV_ITEMS.map(({ name, href, icon: Icon }) => {
+            const active = isActive(href);
             return (
               <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2.5 rounded-2xl px-5 py-2.5 text-base font-semibold transition-all duration-200 ${
-                  isActive
-                    ? "bg-linear-to-r from-cyan-400/20 to-purple-500/20 text-cyan-400 border border-cyan-400/30 shadow-md"
-                    : "bg-[#2b2f46]/60 text-gray-300 hover:bg-[#353a55] hover:text-white border border-white/5"
+                key={href}
+                href={href}
+                aria-label={name}
+                className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm font-semibold transition sm:px-4 ${
+                  active
+                    ? "bg-linear-to-r from-[#c81d25] to-[#e8772e] text-white shadow-[0_0_14px_rgba(232,119,46,0.45)]"
+                    : "text-slate-300 hover:bg-white/5 hover:text-white"
                 }`}
               >
-                <span className="text-xl">{item.icon}</span>
-                <span>{item.name}</span>
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{name}</span>
               </Link>
             );
           })}
         </nav>
 
-        {/* RIGHT */}
-        <div className="flex items-center gap-4">
-          <Link href="/settings" className="flex items-center gap-4">
-            <div className="hidden text-right md:block">
-              <p className="text-lg font-semibold text-white">
-                {user?.name || "Guest"}
+        {/* TÀI KHOẢN */}
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+          <Link
+            href="/settings"
+            className="flex items-center gap-2.5 rounded-2xl p-1 transition hover:bg-white/5 sm:pr-3"
+            title="Cài đặt tài khoản"
+          >
+            <UserAvatar
+              name={user?.name}
+              src={user?.avatar}
+              size={36}
+              className="ring-2 ring-[#f4b942]/60 rounded-full"
+            />
+            <div className="hidden text-left lg:block">
+              <p className="max-w-[160px] truncate text-sm font-semibold leading-tight">
+                {user?.name || "Khách"}
               </p>
-
-              <p className="text-sm text-gray-400">{user?.email || ""}</p>
+              <p className="max-w-[160px] truncate text-xs text-slate-400">
+                {user?.email || ""}
+              </p>
             </div>
-
-            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-lg font-bold text-white shadow-lg">
-              {user?.avatar ? (
-                <Image
-                  src={user.avatar}
-                  alt={user.name || "Avatar"}
-                  fill
-                  className="object-cover"
-                />
-              ) : (
-                user?.name?.charAt(0).toUpperCase() || "G"
-              )}
-            </div>
+            <Settings className="hidden h-4 w-4 text-slate-400 lg:block" />
           </Link>
 
           <button
+            type="button"
             onClick={handleLogout}
-            className="rounded-2xl bg-linear-to-r from-cyan-400 to-purple-500 px-5 py-3 font-semibold text-white transition hover:opacity-90"
+            aria-label="Đăng xuất"
+            title="Đăng xuất"
+            className="flex h-9 items-center gap-2 rounded-xl border border-[#c81d25]/40 bg-[#c81d25]/10 px-2.5 text-sm font-semibold text-[#ff8a7a] transition hover:bg-[#c81d25]/25 hover:text-white sm:px-3"
           >
-            Logout
+            <LogOut className="h-4 w-4" />
+            <span className="hidden md:inline">Đăng xuất</span>
           </button>
         </div>
       </div>

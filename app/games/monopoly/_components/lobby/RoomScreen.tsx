@@ -22,23 +22,23 @@ export default function RoomScreen() {
 
   if (uiStatus === "connecting" || (!room && uiStatus !== "error")) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#1a1c2b] text-white">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
-        <p className="text-sm text-gray-400">Đang vào phòng...</p>
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-[#0d0f1e] text-white">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#f4b942] border-t-transparent" />
+        <p className="text-sm text-slate-400">Đang vào phòng…</p>
       </div>
     );
   }
 
   if (uiStatus === "error" || !room) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#1a1c2b] p-4 text-white">
-        <div className="w-full max-w-sm space-y-4 rounded-3xl border border-rose-500/30 bg-[#262a40] p-6 text-center">
+      <div className="flex min-h-dvh items-center justify-center bg-[#0d0f1e] p-4 text-white">
+        <div className="w-full max-w-sm space-y-4 rounded-3xl border border-[#c81d25]/40 bg-[#11132a] p-6 text-center shadow-2xl">
           <div className="text-5xl">🚫</div>
           <h2 className="text-xl font-bold">Không thể vào phòng</h2>
-          <p className="text-sm text-gray-400">{error}</p>
+          <p className="text-sm text-slate-400">{error}</p>
           <Link
             href="/games/monopoly"
-            className="block rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 py-3 font-bold"
+            className="block rounded-xl bg-linear-to-r from-[#c81d25] to-[#e8772e] py-3 font-bold text-white shadow-[0_4px_0_#7f1118]"
           >
             Về sảnh chờ
           </Link>

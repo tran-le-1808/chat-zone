@@ -1,10 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  CircleAlert,
+  CircleCheck,
+  KeyRound,
+  Settings,
+  UserRound,
+} from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { clearUserStatus } from "@/redux/features/userSlice";
+import { ui } from "@/components/ui/styles";
 import ProfileTab from "./components/ProfileTab";
 import PasswordTab from "./components/PasswordTab";
+
+type Tab = "profile" | "password";
+
+const TABS: { id: Tab; label: string; icon: typeof UserRound }[] = [
+  { id: "profile", label: "Hồ sơ", icon: UserRound },
+  { id: "password", label: "Mật khẩu", icon: KeyRound },
+];
 
 export default function SettingsPage() {
   const dispatch = useAppDispatch();
@@ -13,64 +30,77 @@ export default function SettingsPage() {
     (state) => state.users,
   );
 
-  const [activeTab, setActiveTab] = useState<"profile" | "password">("profile");
+  const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [localError, setLocalError] = useState("");
 
-  // Chỉ gọi dispatch clear status lên Redux khi activeTab đổi
+  // Xoá thông báo cũ khi đổi tab
   useEffect(() => {
     dispatch(clearUserStatus());
   }, [activeTab, dispatch]);
 
-  // Hàm chuyển Tab xử lý tập trung
-  const handleTabChange = (tab: "profile" | "password") => {
+  const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
-    setLocalError(""); // Xóa local error an toàn trong event handler
+    setLocalError("");
   };
 
-  return (
-    <div className="flex flex-1 justify-center bg-[#262a40] p-6 text-white min-h-screen">
-      <div className="w-full max-w-2xl rounded-3xl bg-[#1d2032] p-8 shadow-xl border border-white/10 self-start mt-6">
-        <h1 className="text-2xl font-bold mb-6 text-cyan-400">
-          Cài Đặt Tài Khoản
-        </h1>
+  const errorMsg = error || localError;
 
-        {/* TABS HEADER */}
-        <div className="flex border-b border-white/10 mb-6">
-          <button
-            onClick={() => handleTabChange("profile")}
-            className={`pb-3 px-4 font-medium transition ${
-              activeTab === "profile"
-                ? "border-b-2 border-cyan-400 text-cyan-400"
-                : "text-gray-400 hover:text-white"
-            }`}
-          >
-            Thông tin cá nhân
-          </button>
-          <button
-            onClick={() => handleTabChange("password")}
-            className={`pb-3 px-4 font-medium transition ${
-              activeTab === "password"
-                ? "border-b-2 border-cyan-400 text-cyan-400"
-                : "text-gray-400 hover:text-white"
-            }`}
-          >
-            Đổi mật khẩu
-          </button>
+  return (
+    <div className="mx-auto w-full max-w-2xl px-3 py-5 sm:px-6 sm:py-10">
+      <Link
+        href="/"
+        className={`${ui.btnGhost} -ml-2 mb-3 px-3! py-2! text-sm`}
+      >
+        <ArrowLeft className="h-4 w-4" /> Trang chính
+      </Link>
+
+      <div className={`${ui.card} p-5 sm:p-8`}>
+        <div className="mb-6 flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-[#c81d25] to-[#e8772e] shadow-[0_4px_0_#7f1118]">
+            <Settings className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className={`text-2xl font-extrabold ${ui.goldText}`}>
+              Cài đặt tài khoản
+            </h1>
+            <p className="text-sm text-slate-400">
+              Cập nhật hồ sơ và bảo mật của bạn
+            </p>
+          </div>
         </div>
 
-        {/* ALERT NOTIFICATION */}
+        {/* Tab dạng phân đoạn */}
+        <div className="mb-6 grid grid-cols-2 gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleTabChange(id)}
+              className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition ${
+                activeTab === id
+                  ? "bg-linear-to-r from-[#c81d25] to-[#e8772e] text-white shadow-md"
+                  : "text-slate-400 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
         {updateSuccessMessage && (
-          <div className="mb-4 rounded-xl bg-green-500/20 p-3 text-sm text-green-400 border border-green-500/30">
+          <div className="mb-5 flex items-start gap-2.5 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+            <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" />
             {updateSuccessMessage}
           </div>
         )}
-        {(error || localError) && (
-          <div className="mb-4 rounded-xl bg-red-500/20 p-3 text-sm text-red-400 border border-red-500/30">
-            {error || localError}
+        {errorMsg && (
+          <div className="mb-5 flex items-start gap-2.5 rounded-2xl border border-[#c81d25]/40 bg-[#c81d25]/10 p-3 text-sm text-[#ff8a7a]">
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            {errorMsg}
           </div>
         )}
 
-        {/* TAB CONTENTS */}
         {activeTab === "profile" && <ProfileTab key={user?._id || "profile"} />}
         {activeTab === "password" && (
           <PasswordTab onError={(msg) => setLocalError(msg)} />

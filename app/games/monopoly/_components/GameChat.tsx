@@ -23,11 +23,14 @@ interface GameChatProps {
   variant?: "floating" | "modal" | "inline";
   /** Vị trí nút 💬 của biến thể modal (mặc định: góc phải, trên nút hành động dính đáy) */
   fabClassName?: string;
+  /** Biến thể modal: tự vẽ nút mở chat (vd. đặt trong thanh tiêu đề) thay cho nút nổi */
+  trigger?: (props: { onClick: () => void; unread: number }) => React.ReactNode;
 }
 
 export default function GameChat({
   variant = "floating",
   fabClassName,
+  trigger,
 }: GameChatProps) {
   const { room, chat, myUserId, sendChat } = useRoom();
 
@@ -88,6 +91,9 @@ export default function GameChat({
     if (content === text) setText("");
   };
 
+  if (isModal && trigger) {
+    if (!open) return <>{trigger({ onClick: toggleOpen, unread })}</>;
+  }
   if (isFloating && !open) {
     return (
       <button
@@ -95,8 +101,8 @@ export default function GameChat({
         className={
           isModal
             ? // Phòng chờ: góc phải, phía trên nút "Bắt đầu / Sẵn sàng" dính đáy
-              `fixed z-40 ${fabClassName ?? "bottom-28 right-3 [@media(max-height:500px)]:bottom-3"} flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-2xl text-white shadow-2xl transition hover:opacity-90 active:scale-95`
-            : "absolute left-1.5 top-[86px] z-40 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-xl text-white shadow-2xl transition hover:opacity-90 active:scale-95 md:left-auto md:right-4 md:top-1/2 md:h-14 md:w-14 md:-translate-y-1/2 md:text-2xl [@media(max-height:500px)]:left-1.5 [@media(max-height:500px)]:right-auto [@media(max-height:500px)]:top-[86px] [@media(max-height:500px)]:h-10 [@media(max-height:500px)]:w-10 [@media(max-height:500px)]:translate-y-0 [@media(max-height:500px)]:text-xl"
+              `fixed z-40 ${fabClassName ?? "bottom-28 right-3 [@media(max-height:500px)]:bottom-3"} flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-[#c81d25] to-[#e8772e] text-2xl text-white shadow-2xl transition hover:opacity-90 active:scale-95`
+            : "absolute left-1.5 top-[86px] z-40 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-[#c81d25] to-[#e8772e] text-xl text-white shadow-2xl transition hover:opacity-90 active:scale-95 md:left-auto md:right-4 md:top-1/2 md:h-14 md:w-14 md:-translate-y-1/2 md:text-2xl [@media(max-height:500px)]:left-1.5 [@media(max-height:500px)]:right-auto [@media(max-height:500px)]:top-[86px] [@media(max-height:500px)]:h-10 [@media(max-height:500px)]:w-10 [@media(max-height:500px)]:translate-y-0 [@media(max-height:500px)]:text-xl"
         }
         aria-label="Mở khung chat"
       >
@@ -112,7 +118,7 @@ export default function GameChat({
 
   const panel = (
     <div
-      className={`flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#262a40] shadow-2xl ${
+      className={`flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#11132a] shadow-2xl ${
         isModal
           ? // Bảng chat dạng modal: trượt từ dưới lên; điện thoại ngang: bên phải
             "toy-chat-in fixed inset-x-2 bottom-2 z-[60] h-[72dvh] [@media(max-height:500px)]:left-auto [@media(max-height:500px)]:top-2 [@media(max-height:500px)]:h-auto [@media(max-height:500px)]:w-80 [@media(min-width:768px)_and_(min-height:501px)]:inset-x-auto [@media(min-width:768px)_and_(min-height:501px)]:bottom-4 [@media(min-width:768px)_and_(min-height:501px)]:right-4 [@media(min-width:768px)_and_(min-height:501px)]:h-[min(70vh,620px)] [@media(min-width:768px)_and_(min-height:501px)]:w-96"
@@ -125,12 +131,14 @@ export default function GameChat({
       {/* HEADER */}
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-lg">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-[#c81d25] to-[#e8772e] text-lg">
             💬
           </div>
           <div>
             <h2 className="text-sm font-semibold text-white">Chat phòng</h2>
-            <p className="text-xs text-green-400">{onlineCount} đang online</p>
+            <p className="text-xs text-emerald-400">
+              {onlineCount} đang online
+            </p>
           </div>
         </div>
 
@@ -175,7 +183,9 @@ export default function GameChat({
                 />
                 <div
                   className={`max-w-[75%] rounded-3xl px-3 py-2 text-white ${
-                    isMe ? "bg-blue-800" : "bg-[#323751]"
+                    isMe
+                      ? "bg-linear-to-br from-[#a3241c] to-[#c2621f]"
+                      : "bg-white/[0.07]"
                   }`}
                 >
                   {!isMe && (
@@ -201,7 +211,7 @@ export default function GameChat({
           <button
             type="button"
             onClick={jumpToBottom}
-            className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-cyan-500 px-3 py-1 text-xs font-bold text-white shadow-lg"
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-[#c81d25] px-3 py-1 text-xs font-bold text-white shadow-lg"
           >
             {newBelow} tin mới ↓
           </button>
@@ -214,7 +224,7 @@ export default function GameChat({
           <button
             key={emoji}
             onClick={() => handleSend(emoji)}
-            className="shrink-0 rounded-xl bg-[#323751] px-2 py-1 text-base transition hover:bg-[#3d4363] active:scale-90"
+            className="shrink-0 rounded-xl bg-white/[0.06] px-2 py-1 text-base transition hover:bg-white/[0.12] active:scale-90"
           >
             {emoji}
           </button>
@@ -239,14 +249,14 @@ export default function GameChat({
               }
             }}
             placeholder="Nhắn gì đó..."
-            className="min-w-0 flex-1 rounded-2xl border border-cyan-400 bg-[#2b2f46] px-3 py-2.5 text-sm text-white outline-none"
+            className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/[0.04] focus:border-[#f4b942]/60 px-3 py-2.5 text-sm text-white outline-none"
           />
 
           <button
             onClick={() => handleSend()}
             disabled={!text.trim()}
             aria-label="Gửi"
-            className="flex items-center justify-center rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 p-3 text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center justify-center rounded-2xl bg-gradient-to-r from-[#c81d25] to-[#e8772e] p-3 text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

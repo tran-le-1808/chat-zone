@@ -3,16 +3,19 @@
 import { getProfile, login } from "@/redux/features/authSlice";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, Lock, LogIn, Mail } from "lucide-react";
+import BrandPanel, { BrandLogo } from "@/components/ui/BrandPanel";
+import IconInput from "@/components/ui/IconInput";
+import { ui } from "@/components/ui/styles";
 import { authUrlWithRedirect, readRedirectFromLocation } from "@/lib/redirect";
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email("Email không hợp lệ"),
+  password: z.string().min(6, "Mật khẩu tối thiểu 6 ký tự"),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -21,7 +24,6 @@ export default function LoginPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { loading } = useAppSelector((state) => state.auth);
-  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -37,117 +39,90 @@ export default function LoginPage() {
     );
 
     if (login.fulfilled.match(result)) {
-      toast.success("Login successfully");
+      toast.success("Đăng nhập thành công!");
       dispatch(getProfile());
       // Quay lại trang người dùng đang mở trước khi bị đưa sang login
       router.replace(readRedirectFromLocation());
     }
 
     if (login.rejected.match(result)) {
-      toast.error(result.payload || "Login failed");
+      toast.error(result.payload || "Đăng nhập thất bại");
     }
   };
 
   return (
-    <div className="flex w-full overflow-hidden rounded-[20px] border border-white/10 shadow-2xl">
-      {/* LEFT SIDE */}
-      <div className="hidden w-[45%] flex-col items-center justify-center gap-6 border-r border-white/10 bg-gradient-to-b from-violet-600/30 to-cyan-500/20 p-12 text-center backdrop-blur-xl md:flex">
-        <div className="flex h-16 w-16 items-center justify-center rounded-[18px] border border-white/20 bg-white/10">
-          <span className="text-3xl">💬</span>
+    <div className={`flex w-full overflow-hidden ${ui.card}`}>
+      <BrandPanel
+        title="Chào mừng bạn quay lại!"
+        subtitle="Đăng nhập để tiếp tục trò chuyện và thách đấu bạn bè."
+      />
+
+      <div className="flex flex-1 flex-col justify-center px-5 py-8 sm:px-10 sm:py-12">
+        {/* Logo trên điện thoại (cột thương hiệu bị ẩn) */}
+        <div className="mb-6 flex items-center gap-3 md:hidden">
+          <BrandLogo size={44} />
+          <span className={`text-2xl font-extrabold ${ui.goldText}`}>
+            Chat Zone
+          </span>
         </div>
 
-        <div>
-          <h1 className="mb-2 text-2xl font-medium text-white">Digital Chat</h1>
-          <p className="text-sm leading-relaxed text-white/50">
-            Connect with friends and start chatting instantly
-          </p>
-        </div>
-
-        <div className="w-full border-t border-white/10 pt-6 text-center">
-          <span className="mb-2 block text-2xl">☕</span>
-          <p className="text-sm text-white/60">Welcome Back!</p>
-        </div>
-      </div>
-
-      {/* RIGHT SIDE */}
-      <div className="flex flex-1 flex-col justify-center bg-white/[0.04] px-10 py-12 backdrop-blur-2xl">
-        <p className="mb-1 text-[11px] font-medium uppercase tracking-[2px] text-white/35">
-          Welcome back
+        <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#f4b942]/80">
+          Đăng nhập
         </p>
-        <h2 className="mb-8 text-2xl font-medium text-white">Sign in here</h2>
+        <h2 className="mb-7 mt-1 text-2xl font-extrabold sm:text-3xl">
+          Vào cuộc thôi nào 🎲
+        </h2>
 
         <form
           onSubmit={handleSubmit(onSubmit)}
           noValidate
           className="space-y-4"
         >
-          {/* EMAIL */}
-          <div>
-            <label className="mb-1.5 block text-xs text-white/50">Email</label>
-            <div className="flex items-center gap-2 rounded-[10px] border border-white/15 bg-white/[0.07] px-3.5 py-2.5">
-              <span className="text-white/35">✉</span>
-              <input
-                type="email"
-                placeholder="Enter Email ID"
-                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
-                {...register("email")}
-              />
-            </div>
-            {errors.email && (
-              <p className="mt-1 text-xs text-red-400">
-                {errors.email.message}
-              </p>
-            )}
-          </div>
-
-          {/* PASSWORD */}
-          <div>
-            <label className="mb-1.5 block text-xs text-white/50">
-              Password
-            </label>
-            <div className="flex items-center gap-2 rounded-[10px] border border-white/15 bg-white/[0.07] px-3.5 py-2.5">
-              <span className="text-white/35">🔒</span>
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="Enter Password"
-                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
-                {...register("password")}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-xs text-indigo-300 hover:text-indigo-200"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-            </div>
-            {errors.password && (
-              <p className="mt-1 text-xs text-red-400">
-                {errors.password.message}
-              </p>
-            )}
-          </div>
+          <IconInput
+            label="Email"
+            icon={Mail}
+            type="email"
+            autoComplete="email"
+            placeholder="ban@email.com"
+            error={errors.email?.message}
+            {...register("email")}
+          />
+          <IconInput
+            label="Mật khẩu"
+            icon={Lock}
+            type="password"
+            autoComplete="current-password"
+            placeholder="Nhập mật khẩu"
+            error={errors.password?.message}
+            {...register("password")}
+          />
 
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 w-full rounded-[10px] bg-gradient-to-r from-indigo-500 to-violet-500 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            className={`${ui.btnPrimary} mt-2 w-full`}
           >
-            {loading ? "Signing in..." : "Continue"}
+            {loading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <LogIn className="h-5 w-5" />
+            )}
+            {loading ? "Đang đăng nhập…" : "Đăng nhập"}
           </button>
 
-          <p className="pt-2 text-center text-sm text-white/40">
-            Don&apos;t have an account?{" "}
-            <span
+          <p className="pt-2 text-center text-sm text-slate-400">
+            Chưa có tài khoản?{" "}
+            <button
+              type="button"
               onClick={() =>
                 router.push(
                   authUrlWithRedirect("/register", readRedirectFromLocation()),
                 )
               }
-              className="cursor-pointer text-indigo-300 hover:text-indigo-200"
+              className="font-bold text-[#ffd166] hover:underline"
             >
-              Register
-            </span>
+              Đăng ký ngay
+            </button>
           </p>
         </form>
       </div>

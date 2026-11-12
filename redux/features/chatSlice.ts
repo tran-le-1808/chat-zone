@@ -355,12 +355,16 @@ const chatSlice = createSlice({
       // GET MESSAGES
       //
 
-      .addCase(getMessages.pending, (state) => {
+      // Phản hồi của hội thoại KHÁC hội thoại đang chọn (người dùng đã bấm sang hội thoại khác
+      // trong lúc chờ mạng) bị bỏ qua -> không ghi đè tin nhắn của hội thoại đang mở.
+      .addCase(getMessages.pending, (state, action) => {
+        if (action.meta.arg !== state.selectedConversation?._id) return;
         state.loading = true;
         state.error = null;
       })
 
       .addCase(getMessages.fulfilled, (state, action) => {
+        if (action.meta.arg !== state.selectedConversation?._id) return;
         state.loading = false;
         state.messages = action.payload.messages;
         state.hasMoreMessages = action.payload.hasMore;
@@ -368,6 +372,7 @@ const chatSlice = createSlice({
       })
 
       .addCase(getMessages.rejected, (state, action) => {
+        if (action.meta.arg !== state.selectedConversation?._id) return;
         state.loading = false;
         state.error = action.payload || "Error";
       })
@@ -379,6 +384,8 @@ const chatSlice = createSlice({
 
       .addCase(loadMoreMessages.fulfilled, (state, action) => {
         state.loadingMoreMessages = false;
+        if (action.meta.arg.conversationId !== state.selectedConversation?._id)
+          return;
         state.messages = [...action.payload.messages, ...state.messages];
 
         state.hasMoreMessages = action.payload.hasMore;

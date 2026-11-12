@@ -63,6 +63,8 @@ function HomeContent() {
   const [search, setSearch] = useState("");
   const [openNewChat, setOpenNewChat] = useState(false);
   const [openCreateGroup, setOpenCreateGroup] = useState(false);
+  // Ngăn trượt thông tin hội thoại (màn hình < xl)
+  const [infoOpen, setInfoOpen] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
 
   // 1. WEBSOCKET REALTIME SYNC (Tin nhắn mới & Tạo Group mới)
@@ -193,23 +195,29 @@ function HomeContent() {
     }
   }, [conversations, selectedConversation, conversationId, isAiMode, dispatch]);
 
-  // Fetch Normal Chat Messages & Join Socket Room
+  // Người đang chat cùng (hội thoại 1-1)
   useEffect(() => {
-    if (isAiMode || !selectedConversation?._id || !user?._id) return;
+    if (isAiMode || !selectedConversation || !user?._id) return;
+    const otherUser = selectedConversation.isGroup
+      ? null
+      : selectedConversation.participants?.find(
+          (participant) => participant._id !== user._id,
+        );
+    dispatch(setSelectedUser(otherUser ?? null));
+  }, [dispatch, selectedConversation, user?._id, isAiMode]);
 
-    const otherUser = selectedConversation.participants?.find(
-      (participant) => participant._id !== user._id,
-    );
-
-    if (otherUser) {
-      dispatch(setSelectedUser(otherUser));
-    }
+  // Fetch Normal Chat Messages & Join Socket Room
+  // Chỉ chạy khi ID hội thoại đổi (không chạy lại mỗi khi object hội thoại được cập nhật
+  // do tải lại danh sách / tin nhắn mới qua socket -> tránh gọi API thừa & phản hồi cũ ghi đè)
+  const selectedConversationId = selectedConversation?._id;
+  useEffect(() => {
+    if (isAiMode || !selectedConversationId || !user?._id) return;
 
     // Join room conversation cụ thể
-    socket.emit("joinConversation", selectedConversation._id);
+    socket.emit("joinConversation", selectedConversationId);
 
-    dispatch(getMessages(selectedConversation._id));
-  }, [dispatch, selectedConversation, user?._id, isAiMode]);
+    dispatch(getMessages(selectedConversationId));
+  }, [dispatch, selectedConversationId, user?._id, isAiMode]);
 
   return (
     <>
@@ -218,9 +226,12 @@ function HomeContent() {
         open={openCreateGroup}
         onClose={() => setOpenCreateGroup(false)}
       />
-      <div className="flex h-[calc(100vh-88px)] overflow-hidden bg-[#1f2235]">
-        {/* SIDEBAR */}
-        <div className="hidden shrink-0 md:block">
+      {/* Điện thoại: hiện DANH SÁCH hoặc KHUNG CHAT (theo ?conversationId);
+          từ md: danh sách + khung chat; xl: thêm cột thông tin */}
+      <div className="flex h-full min-h-0 overflow-hidden">
+        <div
+          className={`${conversationId ? "hidden md:flex" : "flex"} h-full w-full shrink-0 md:w-[320px] xl:w-[350px]`}
+        >
           <Sidebar
             conversations={conversations}
             selectedConversationId={
@@ -228,6 +239,7 @@ function HomeContent() {
             }
             hasMore={hasMore}
             onSelectConversation={(conversation) => {
+              setInfoOpen(false);
               router.push(`/?conversationId=${conversation._id}`);
             }}
             onSearch={(keyword) => {
@@ -244,24 +256,37 @@ function HomeContent() {
               setOpenCreateGroup(true);
             }}
             onSelectAiChat={() => {
+              setInfoOpen(false);
               router.push(`/?conversationId=ai-chat`);
             }}
           />
         </div>
 
-        {/* CHAT AREA */}
-        <ChatArea
-          messages={isAiMode ? aiMessages : messages}
-          hasMoreMessages={isAiMode ? aiHasMoreMessages : hasMoreMessages}
-          nextCursor={isAiMode ? aiNextCursor : nextCursor}
-          loadingMoreMessages={
-            isAiMode ? aiLoadingMoreMessages : loadingMoreMessages
-          }
-          isAI={isAiMode}
-        />
+        <div
+          className={`${conversationId ? "flex" : "hidden md:flex"} h-full min-w-0 flex-1`}
+        >
+          <ChatArea
+            messages={isAiMode ? aiMessages : messages}
+            hasMoreMessages={isAiMode ? aiHasMoreMessages : hasMoreMessages}
+            nextCursor={isAiMode ? aiNextCursor : nextCursor}
+            loadingMoreMessages={
+              isAiMode ? aiLoadingMoreMessages : loadingMoreMessages
+            }
+            isAI={isAiMode}
+            onBack={() => {
+              setInfoOpen(false);
+              router.push("/");
+            }}
+            onOpenInfo={() => setInfoOpen(true)}
+          />
+        </div>
 
-        {/* RIGHT SIDEBAR */}
-        <RightSidebar />
+        <RightSidebar
+          messages={isAiMode ? aiMessages : messages}
+          isAI={isAiMode}
+          open={infoOpen}
+          onClose={() => setInfoOpen(false)}
+        />
       </div>
     </>
   );
