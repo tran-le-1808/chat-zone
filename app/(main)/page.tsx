@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 import ChatArea from "./_components/ChatArea";
 import RightSidebar from "./_components/RightSidebar";
@@ -28,10 +28,10 @@ import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import useDebounce from "@/hooks/useDebounce";
 import { socket } from "@/lib/socket"; // Import instance socket từ lib của bạn
 import { Conversation, Message } from "@/types/chat";
+import { goToConversation } from "@/lib/chatNav";
 
 function HomeContent() {
   const dispatch = useAppDispatch();
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const conversationId = searchParams.get("conversationId");
@@ -140,7 +140,7 @@ function HomeContent() {
           if (createAIConversation.fulfilled.match(createAction)) {
             const newConv = createAction.payload;
             dispatch(setSelectedAIConversation(newConv));
-            router.replace(`/?conversationId=${newConv._id}`);
+            goToConversation(newConv._id, { replace: true });
           }
         } else {
           dispatch(setSelectedAIConversation(conversationsList[0]));
@@ -149,7 +149,7 @@ function HomeContent() {
     };
 
     initializeAiChat();
-  }, [isAiMode, dispatch, router]);
+  }, [isAiMode, dispatch]);
 
   // 3. FETCH AI MESSAGES
   useEffect(() => {
@@ -240,7 +240,7 @@ function HomeContent() {
             hasMore={hasMore}
             onSelectConversation={(conversation) => {
               setInfoOpen(false);
-              router.push(`/?conversationId=${conversation._id}`);
+              goToConversation(conversation._id);
             }}
             onSearch={(keyword) => {
               setPage(1);
@@ -257,7 +257,7 @@ function HomeContent() {
             }}
             onSelectAiChat={() => {
               setInfoOpen(false);
-              router.push(`/?conversationId=ai-chat`);
+              goToConversation("ai-chat");
             }}
           />
         </div>
@@ -275,7 +275,7 @@ function HomeContent() {
             isAI={isAiMode}
             onBack={() => {
               setInfoOpen(false);
-              router.push("/");
+              goToConversation(null);
             }}
             onOpenInfo={() => setInfoOpen(true)}
           />

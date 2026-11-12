@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { goToConversation } from "@/lib/chatNav";
 
 interface NewChatModalProps {
   open: boolean;
@@ -32,7 +32,6 @@ export default function NewChatModal({
   onClose,
 }: NewChatModalProps) {
   const dispatch = useAppDispatch();
-  const router = useRouter();
 
   const { users, loading } = useAppSelector((state) => state.users);
   const { user } = useAppSelector((state) => state.auth);
@@ -64,7 +63,7 @@ export default function NewChatModal({
 
       // Đồng bộ URL với hội thoại mới (tránh bị chọn lại hội thoại cũ theo URL;
       // trên điện thoại chuyển thẳng sang khung chat)
-      router.push(`/?conversationId=${result.payload._id}`);
+      goToConversation(result.payload._id);
       onClose();
     }
   };

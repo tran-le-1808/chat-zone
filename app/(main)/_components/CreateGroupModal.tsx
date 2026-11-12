@@ -12,7 +12,6 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import useDebounce from "@/hooks/useDebounce";
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { searchUsers, SearchUser } from "@/redux/features/userSlice";
@@ -20,6 +19,7 @@ import {
   createGroup,
   setSelectedConversation,
 } from "@/redux/features/chatSlice";
+import { goToConversation } from "@/lib/chatNav";
 
 interface CreateGroupModalProps {
   open: boolean;
@@ -31,7 +31,6 @@ export default function CreateGroupModal({
   onClose,
 }: CreateGroupModalProps) {
   const dispatch = useAppDispatch();
-  const router = useRouter();
 
   const { users, loading } = useAppSelector((state) => state.users);
   const { user } = useAppSelector((state) => state.auth);
@@ -109,7 +108,7 @@ export default function CreateGroupModal({
       if (createGroup.fulfilled.match(resultAction)) {
         const newGroup = resultAction.payload;
         dispatch(setSelectedConversation(newGroup));
-        router.push(`/?conversationId=${newGroup._id}`);
+        goToConversation(newGroup._id);
         handleClose();
       } else {
         setErrorMsg((resultAction.payload as string) || "Tạo nhóm thất bại!");
