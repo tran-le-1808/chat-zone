@@ -21,15 +21,21 @@ interface GameChatProps {
    * inline: nằm trong bố cục phòng chờ (iPad / desktop)
    */
   variant?: "floating" | "modal" | "inline";
+  /** Vị trí nút 💬 của biến thể modal (mặc định: góc phải, trên nút hành động dính đáy) */
+  fabClassName?: string;
 }
 
-export default function GameChat({ variant = "floating" }: GameChatProps) {
+export default function GameChat({
+  variant = "floating",
+  fabClassName,
+}: GameChatProps) {
   const { room, chat, myUserId, sendChat } = useRoom();
 
   const isCompact = useIsCompact();
   // null = theo mặc định của màn hình (điện thoại: đóng, iPad / desktop: mở)
   const [openPref, setOpenPref] = useState<boolean | null>(null);
-  const open = openPref ?? !isCompact;
+  // Modal luôn đóng khi mới vào; dạng nổi trong game: máy tính mở sẵn, điện thoại đóng
+  const open = openPref ?? (variant === "modal" ? false : !isCompact);
   const [text, setText] = useState("");
   const [seenCount, setSeenCount] = useState(chat.length);
 
@@ -42,12 +48,34 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
 
   // Cuộn xuống tin mới nhất — chỉ cuộn TRONG khung chat
   // (scrollIntoView sẽ kéo cả trang xuống, vd. phòng chờ trên điện thoại)
+  // Đang kéo lên xem tin cũ thì KHÔNG tự cuộn, chỉ hiện nút "Tin mới"
   const visible = !isFloating || open;
+  const atBottomRef = useRef(true);
+  const [newBelow, setNewBelow] = useState(0);
+  const lastMine = chat.length > 0 && chat[chat.length - 1].userId === myUserId;
   useEffect(() => {
     if (!visible) return;
     const list = listRef.current;
-    if (list) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+    if (!list) return;
+    if (atBottomRef.current || lastMine) {
+      list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+    } else {
+      setNewBelow((n) => n + 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, chat.length]);
+  const onListScroll = () => {
+    const list = listRef.current;
+    if (!list) return;
+    atBottomRef.current =
+      list.scrollHeight - list.scrollTop - list.clientHeight < 48;
+    if (atBottomRef.current && newBelow) setNewBelow(0);
+  };
+  const jumpToBottom = () => {
+    const list = listRef.current;
+    if (list) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+    setNewBelow(0);
+  };
 
   const toggleOpen = () => {
     setOpenPref(!open);
@@ -67,7 +95,7 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
         className={
           isModal
             ? // Phòng chờ: góc phải, phía trên nút "Bắt đầu / Sẵn sàng" dính đáy
-              "fixed bottom-28 right-3 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-2xl text-white shadow-2xl transition hover:opacity-90 active:scale-95 [@media(max-height:500px)]:bottom-3"
+              `fixed z-40 ${fabClassName ?? "bottom-28 right-3 [@media(max-height:500px)]:bottom-3"} flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-2xl text-white shadow-2xl transition hover:opacity-90 active:scale-95`
             : "absolute left-1.5 top-[86px] z-40 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 text-xl text-white shadow-2xl transition hover:opacity-90 active:scale-95 md:left-auto md:right-4 md:top-1/2 md:h-14 md:w-14 md:-translate-y-1/2 md:text-2xl [@media(max-height:500px)]:left-1.5 [@media(max-height:500px)]:right-auto [@media(max-height:500px)]:top-[86px] [@media(max-height:500px)]:h-10 [@media(max-height:500px)]:w-10 [@media(max-height:500px)]:translate-y-0 [@media(max-height:500px)]:text-xl"
         }
         aria-label="Mở khung chat"
@@ -87,7 +115,7 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
       className={`flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#262a40] shadow-2xl ${
         isModal
           ? // Bảng chat dạng modal: trượt từ dưới lên; điện thoại ngang: bên phải
-            "toy-chat-in fixed inset-x-2 bottom-2 z-[60] h-[72dvh] [@media(max-height:500px)]:left-auto [@media(max-height:500px)]:top-2 [@media(max-height:500px)]:h-auto [@media(max-height:500px)]:w-80"
+            "toy-chat-in fixed inset-x-2 bottom-2 z-[60] h-[72dvh] [@media(max-height:500px)]:left-auto [@media(max-height:500px)]:top-2 [@media(max-height:500px)]:h-auto [@media(max-height:500px)]:w-80 [@media(min-width:768px)_and_(min-height:501px)]:inset-x-auto [@media(min-width:768px)_and_(min-height:501px)]:bottom-4 [@media(min-width:768px)_and_(min-height:501px)]:right-4 [@media(min-width:768px)_and_(min-height:501px)]:h-[min(70vh,620px)] [@media(min-width:768px)_and_(min-height:501px)]:w-96"
           : isFloating
             ? // Điện thoại: bảng trượt từ dưới lên; iPad / desktop: khung nổi bên phải
               "absolute inset-x-2 bottom-2 z-[60] h-[60dvh] md:inset-x-auto md:bottom-auto md:right-4 md:top-1/2 md:z-40 md:h-[52vh] md:max-h-[520px] md:w-80 md:-translate-y-1/2 [@media(max-height:500px)]:top-2 [@media(max-height:500px)]:bottom-2 [@media(max-height:500px)]:left-auto [@media(max-height:500px)]:right-2 [@media(max-height:500px)]:w-80 [@media(max-height:500px)]:h-auto [@media(max-height:500px)]:translate-y-0"
@@ -118,51 +146,66 @@ export default function GameChat({ variant = "floating" }: GameChatProps) {
       </div>
 
       {/* MESSAGES LIST */}
-      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-3">
-        {chat.length === 0 && (
-          <p className="pt-6 text-center text-xs text-gray-500">
-            Chưa có tin nhắn nào. Hãy chào mọi người một câu! 👋
-          </p>
-        )}
-        {chat.map((message) => {
-          const isMe = message.userId === myUserId;
-          const preset = INITIAL_PLAYERS[message.seat];
-          const color = preset?.color ?? "#22d3ee";
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={listRef}
+          onScroll={onListScroll}
+          className="flex-1 space-y-3 overflow-y-auto p-3"
+        >
+          {chat.length === 0 && (
+            <p className="pt-6 text-center text-xs text-gray-500">
+              Chưa có tin nhắn nào. Hãy chào mọi người một câu! 👋
+            </p>
+          )}
+          {chat.map((message) => {
+            const isMe = message.userId === myUserId;
+            const preset = INITIAL_PLAYERS[message.seat];
+            const color = preset?.color ?? "#22d3ee";
 
-          return (
-            <div
-              key={message.id}
-              className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}
-            >
-              <PlayerAvatar
-                name={message.name}
-                avatar={message.avatar}
-                color={color}
-                size={28}
-              />
+            return (
               <div
-                className={`max-w-[75%] rounded-3xl px-3 py-2 text-white ${
-                  isMe ? "bg-blue-800" : "bg-[#323751]"
-                }`}
+                key={message.id}
+                className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}
               >
-                {!isMe && (
-                  <div
-                    className="mb-0.5 text-[11px] font-bold"
-                    style={{ color }}
-                  >
-                    {message.name}
+                <PlayerAvatar
+                  name={message.name}
+                  avatar={message.avatar}
+                  color={color}
+                  size={28}
+                />
+                <div
+                  className={`max-w-[75%] rounded-3xl px-3 py-2 text-white ${
+                    isMe ? "bg-blue-800" : "bg-[#323751]"
+                  }`}
+                >
+                  {!isMe && (
+                    <div
+                      className="mb-0.5 text-[11px] font-bold"
+                      style={{ color }}
+                    >
+                      {message.name}
+                    </div>
+                  )}
+                  <p className="whitespace-pre-wrap break-words text-sm">
+                    {message.text}
+                  </p>
+                  <div className="mt-0.5 text-right text-[10px] text-white/40">
+                    {formatTime(message.createdAt)}
                   </div>
-                )}
-                <p className="whitespace-pre-wrap break-words text-sm">
-                  {message.text}
-                </p>
-                <div className="mt-0.5 text-right text-[10px] text-white/40">
-                  {formatTime(message.createdAt)}
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        {newBelow > 0 && (
+          <button
+            type="button"
+            onClick={jumpToBottom}
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-cyan-500 px-3 py-1 text-xs font-bold text-white shadow-lg"
+          >
+            {newBelow} tin mới ↓
+          </button>
+        )}
       </div>
 
       {/* QUICK EMOJIS */}

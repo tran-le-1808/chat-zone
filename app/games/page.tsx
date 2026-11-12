@@ -54,6 +54,18 @@ const GAMES_LIST: GameItem[] = [
     slug: "/games/chess",
   },
   {
+    id: "5",
+    title: "Bida Carom",
+    description:
+      "Bàn 3 bi không lỗ với vật lý chân thực: xoáy, English, phản xạ băng. Đấu 1 vs 1 theo luật Phăng hoặc 3 băng.",
+    category: "Thể thao",
+    players: "2 Người",
+    icon: "🎱",
+    bannerBg: "from-emerald-600 to-teal-500",
+    isAvailable: true,
+    slug: "/games/billiard",
+  },
+  {
     id: "4",
     title: "Uno Card",
     description:

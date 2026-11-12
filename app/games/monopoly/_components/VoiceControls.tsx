@@ -11,7 +11,8 @@ import { useOptionalVoice } from "../_context/VoiceContext";
 export default function VoiceControls({
   variant,
 }: {
-  variant: "lobby" | "game";
+  /** lobby: thanh nút · game: nút tròn nổi (bàn cờ) · stack: nút tròn xếp dọc, nằm trong bố cục */
+  variant: "lobby" | "game" | "stack";
 }) {
   const voice = useOptionalVoice();
   if (!voice) return null;
@@ -94,11 +95,18 @@ export default function VoiceControls({
   // ===== Trong game: nút tròn nổi =====
   if (!supported) return null;
   const round =
-    "relative flex h-10 w-10 items-center justify-center rounded-full text-lg text-white shadow-xl transition active:scale-95 md:h-12 md:w-12 md:text-xl [@media(max-height:500px)]:h-10 [@media(max-height:500px)]:w-10 [@media(max-height:500px)]:text-lg";
+    variant === "stack"
+      ? // Cột hẹp: nút nhỏ, xếp ngang tự xuống dòng (không chiếm chỗ góc cơ)
+        "relative flex h-8 w-8 items-center justify-center rounded-full text-sm text-white shadow-lg transition active:scale-95"
+      : "relative flex h-10 w-10 items-center justify-center rounded-full text-lg text-white shadow-xl transition active:scale-95 md:h-12 md:w-12 md:text-xl [@media(max-height:500px)]:h-10 [@media(max-height:500px)]:w-10 [@media(max-height:500px)]:text-lg";
 
   return (
     <div // Điện thoại: cột trái dưới nút chat; desktop: hàng ngang dưới thanh mã phòng (bên trái, không đè khung chat)
-      className="absolute left-1.5 top-[132px] z-40 flex flex-col gap-2 md:left-4 md:top-[148px] md:flex-row [@media(max-height:500px)]:left-1.5 [@media(max-height:500px)]:top-[132px] [@media(max-height:500px)]:flex-col"
+      className={
+        variant === "stack"
+          ? "flex shrink-0 flex-wrap justify-center gap-1"
+          : "absolute left-1.5 top-[132px] z-40 flex flex-col gap-2 md:left-4 md:top-[148px] md:flex-row [@media(max-height:500px)]:left-1.5 [@media(max-height:500px)]:top-[132px] [@media(max-height:500px)]:flex-col"
+      }
     >
       {!enabled ? (
         <button

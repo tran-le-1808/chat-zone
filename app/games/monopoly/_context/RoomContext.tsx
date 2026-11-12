@@ -26,6 +26,11 @@ const MAX_CHAT = 100;
 type RoomStatusUI = "connecting" | "joined" | "error";
 
 interface RoomContextType {
+  game: RoomGame;
+  /** Tiền tố sự kiện socket: "mono" | "bida" */
+  prefix: string;
+  /** Trang sảnh của game */
+  basePath: string;
   code: string;
   room: RoomInfo | null;
   uiStatus: RoomStatusUI;
@@ -44,7 +49,9 @@ interface RoomContextType {
   kickPlayer: (userId: string) => Promise<void>;
   setReady: (ready: boolean) => Promise<void>;
   changeSeat: (seat: number) => Promise<void>;
-  updateSettings: (patch: Partial<RoomSettings>) => Promise<void>;
+  updateSettings: (
+    patch: Partial<RoomSettings> | Record<string, unknown>,
+  ) => Promise<void>;
   startGame: () => Promise<void>;
   resetToLobby: () => Promise<void>;
   finishGame: () => void;
@@ -52,13 +59,28 @@ interface RoomContextType {
 
 const RoomContext = createContext<RoomContextType | null>(null);
 
+/** Các game dùng chung hệ thống phòng (mỗi game có tiền tố sự kiện socket riêng) */
+export type RoomGame = "monopoly" | "billiard";
+const GAME_PREFIX: Record<RoomGame, string> = {
+  monopoly: "mono",
+  billiard: "bida",
+};
+const GAME_PATH: Record<RoomGame, string> = {
+  monopoly: "/games/monopoly",
+  billiard: "/games/billiard",
+};
+
 export function RoomProvider({
   code,
+  game = "monopoly",
   children,
 }: {
   code: string;
+  game?: RoomGame;
   children: React.ReactNode;
 }) {
+  const prefix = GAME_PREFIX[game];
+  const basePath = GAME_PATH[game];
   const router = useRouter();
   const { user } = useAppSelector((state) => state.auth);
   const myUserId = user?._id ?? null;
@@ -97,7 +119,7 @@ export function RoomProvider({
         setError("Không kết nối được tới máy chủ");
         return;
       }
-      const res = await monoEmit<JoinResult>("mono:join", { code });
+      const res = await monoEmit<JoinResult>(`${prefix}:join`, { code });
       if (cancelled) return;
       if (!res.ok || !res.data) {
         setUiStatus("error");
@@ -124,7 +146,7 @@ export function RoomProvider({
       cancelled = true;
       socket.off("connect", onReconnect);
     };
-  }, [code, myUserId]);
+  }, [code, myUserId, prefix]);
 
   // ===================== SERVER EVENTS =====================
   useEffect(() => {
@@ -138,21 +160,21 @@ export function RoomProvider({
       if (data.code !== code) return;
       leavingRef.current = true;
       toast.error("Bạn đã bị chủ phòng mời ra khỏi phòng");
-      router.replace("/games/monopoly");
+      router.replace(basePath);
     };
     const onNotice = (data: { text: string }) => toast(data.text);
 
-    socket.on("mono:room", onRoom);
-    socket.on("mono:chat", onChat);
-    socket.on("mono:kicked", onKicked);
-    socket.on("mono:notice", onNotice);
+    socket.on(`${prefix}:room`, onRoom);
+    socket.on(`${prefix}:chat`, onChat);
+    socket.on(`${prefix}:kicked`, onKicked);
+    socket.on(`${prefix}:notice`, onNotice);
     return () => {
-      socket.off("mono:room", onRoom);
-      socket.off("mono:chat", onChat);
-      socket.off("mono:kicked", onKicked);
-      socket.off("mono:notice", onNotice);
+      socket.off(`${prefix}:room`, onRoom);
+      socket.off(`${prefix}:chat`, onChat);
+      socket.off(`${prefix}:kicked`, onKicked);
+      socket.off(`${prefix}:notice`, onNotice);
     };
-  }, [code, router, applyRoom]);
+  }, [code, router, applyRoom, prefix, basePath]);
 
   // ===================== ACTIONS =====================
   const run = async (event: string, payload?: unknown) => {
@@ -164,35 +186,37 @@ export function RoomProvider({
   const sendChat = (text: string) => {
     const content = text.trim();
     if (!content) return;
-    void run("mono:chat", { text: content });
+    void run(`${prefix}:chat`, { text: content });
   };
 
   const leaveRoom = async () => {
     leavingRef.current = true;
-    await monoEmit("mono:leave");
-    router.push("/games/monopoly");
+    await monoEmit(`${prefix}:leave`);
+    router.push(basePath);
   };
 
   const kickPlayer = async (userId: string) => {
-    await run("mono:kick", { userId });
+    await run(`${prefix}:kick`, { userId });
   };
   const setReady = async (ready: boolean) => {
-    await run("mono:ready", { ready });
+    await run(`${prefix}:ready`, { ready });
   };
   const changeSeat = async (seat: number) => {
-    await run("mono:seat", { seat });
+    await run(`${prefix}:seat`, { seat });
   };
-  const updateSettings = async (patch: Partial<RoomSettings>) => {
-    await run("mono:settings", patch);
+  const updateSettings = async (
+    patch: Partial<RoomSettings> | Record<string, unknown>,
+  ) => {
+    await run(`${prefix}:settings`, patch);
   };
   const startGame = async () => {
-    await run("mono:start");
+    await run(`${prefix}:start`);
   };
   const resetToLobby = async () => {
-    await run("mono:reset");
+    await run(`${prefix}:reset`);
   };
   const finishGame = () => {
-    void monoEmit("mono:finish");
+    void monoEmit(`${prefix}:finish`);
   };
 
   const me = room?.players.find((p) => p.userId === myUserId) ?? null;
@@ -201,6 +225,9 @@ export function RoomProvider({
   return (
     <RoomContext.Provider
       value={{
+        game,
+        prefix,
+        basePath,
         code,
         room,
         uiStatus,

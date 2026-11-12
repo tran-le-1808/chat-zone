@@ -21,7 +21,8 @@ import { useRoom } from "./RoomContext";
  * thì vào game vẫn giữ nguyên kết nối; chưa bật thì có thể bật ngay trong game.
  */
 
-const ICE_SERVERS: RTCIceServer[] = [
+/** Dự phòng khi server chưa trả cấu hình (TURN lấy từ biến môi trường server) */
+const FALLBACK_ICE: RTCIceServer[] = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
 ];
 /** Ngưỡng âm lượng (RMS 0..1) coi là "đang nói" */
@@ -55,11 +56,20 @@ interface VoiceContextType {
   leave: () => void;
   toggleMute: () => void;
   resumeAudio: () => void;
+  /** Trạng thái kết nối tới từng người (new / connecting / connected / failed ...) */
+  peerStates: Record<string, RTCPeerConnectionState>;
+  /** Âm lượng nghe voice 0..1 */
+  volume: number;
+  setVolume: (v: number) => void;
+  /** Danh sách micro & micro đang dùng */
+  devices: MediaDeviceInfo[];
+  deviceId: string | null;
+  selectDevice: (deviceId: string) => Promise<void>;
 }
 
 const VoiceContext = createContext<VoiceContextType | null>(null);
 
-const storageKey = (code: string) => `mono-voice:${code}`;
+const storageKey = (code: string) => `room-voice:${code}`;
 const readPref = (code: string) => {
   try {
     return sessionStorage.getItem(storageKey(code));
@@ -77,7 +87,7 @@ const writePref = (code: string, value: "on" | "muted" | null) => {
 };
 
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
-  const { code, myUserId } = useRoom();
+  const { code, myUserId, prefix } = useRoom();
 
   const [supported] = useState(
     () =>
@@ -91,6 +101,14 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<Record<string, { muted: boolean }>>({});
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
   const [audioBlocked, setAudioBlocked] = useState(false);
+  const [peerStates, setPeerStates] = useState<
+    Record<string, RTCPeerConnectionState>
+  >({});
+  const [volume, setVolumeState] = useState(1);
+  const volumeRef = useRef(1);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const iceRef = useRef<RTCIceServer[]>(FALLBACK_ICE);
   // Đọc 1 lần ở lần render đầu (trước mọi cleanup của StrictMode)
   const [initialPref] = useState(() =>
     typeof window === "undefined" ? null : readPref(code),
@@ -143,9 +161,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   }, [enabled, myUserId]);
 
   // ---------- Kết nối tới từng người ----------
-  const sendSignal = useCallback((to: string, data: Signal) => {
-    void monoEmit("mono:voice:signal", { to, data });
-  }, []);
+  const sendSignal = useCallback(
+    (to: string, data: Signal) => {
+      void monoEmit(`${prefix}:voice:signal`, { to, data });
+    },
+    [prefix],
+  );
 
   const closePeer = useCallback((peerId: string) => {
     pcsRef.current.get(peerId)?.close();
@@ -169,7 +190,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const createPeer = useCallback(
     (peerId: string, initiator: boolean) => {
       closePeer(peerId);
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection({ iceServers: iceRef.current });
       pcsRef.current.set(peerId, pc);
 
       localStreamRef.current
@@ -192,10 +213,13 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           audioElsRef.current.set(peerId, el);
         }
         el.srcObject = stream;
+        el.volume = volumeRef.current;
         playAudio(el);
         addAnalyser(peerId, stream);
       };
       pc.onconnectionstatechange = () => {
+        setPeerStates((prev) => ({ ...prev, [peerId]: pc.connectionState }));
+        // Mất kết nối -> thử lại ICE (TURN sẽ được dùng nếu kết nối trực tiếp thất bại)
         if (pc.connectionState === "failed") pc.restartIce?.();
       };
 
@@ -233,7 +257,81 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     audioCtxRef.current = null;
     setSpeaking({});
     setAudioBlocked(false);
+    setPeerStates({});
   }, [closePeer]);
+
+  // ---------- Thiết bị micro ----------
+  const deviceIdRef = useRef<string | null>(null);
+  const leaveRef = useRef<() => void>(() => {});
+
+  const refreshDevices = useCallback(async () => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      setDevices(all.filter((d) => d.kind === "audioinput"));
+    } catch {
+      /* bỏ qua */
+    }
+  }, []);
+
+  /** Micro bị rút / tắt giữa chừng -> báo & rời voice (vẫn chơi tiếp được) */
+  const watchTrack = (stream: MediaStream) => {
+    stream.getAudioTracks().forEach((t) => {
+      t.onended = () => {
+        if (!enabledRef.current) return;
+        toast.error("Micro đã bị ngắt kết nối — đã tắt voice chat");
+        leaveRef.current();
+      };
+      const settings = t.getSettings?.();
+      if (settings?.deviceId) {
+        deviceIdRef.current = settings.deviceId;
+        setDeviceId(settings.deviceId);
+      }
+    });
+  };
+
+  /** Đổi micro khi đang trong voice: thay track trên mọi kết nối, không cần kết nối lại */
+  const selectDevice = useCallback(
+    async (id: string) => {
+      deviceIdRef.current = id;
+      setDeviceId(id);
+      if (!enabledRef.current) return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: id },
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        const track = stream.getAudioTracks()[0];
+        track.enabled = !mutedRef.current;
+        await Promise.all(
+          Array.from(pcsRef.current.values()).map((pc) =>
+            pc
+              .getSenders()
+              .find((s) => s.track?.kind === "audio")
+              ?.replaceTrack(track),
+          ),
+        );
+        localStreamRef.current?.getTracks().forEach((t) => t.stop());
+        localStreamRef.current = stream;
+        watchTrack(stream);
+        if (myUserId) addAnalyser(myUserId, stream);
+      } catch {
+        toast.error("Không dùng được micro này");
+      }
+    },
+     
+    [myUserId, addAnalyser],
+  );
+
+  const setVolume = useCallback((v: number) => {
+    const next = Math.max(0, Math.min(1, v));
+    volumeRef.current = next;
+    setVolumeState(next);
+    audioElsRef.current.forEach((el) => (el.volume = next));
+  }, []);
 
   // ---------- Bật / tắt ----------
   const join = useCallback(
@@ -241,13 +339,24 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       if (!supported || enabledRef.current) return;
       setConnecting(true);
       try {
+        // Cấu hình STUN / TURN do server cấp (không để credential ở frontend)
+        const ice = await monoEmit<{ iceServers: RTCIceServer[] }>(
+          `${prefix}:voice:config`,
+        );
+        if (ice.ok && ice.data?.iceServers?.length)
+          iceRef.current = ice.data.iceServers;
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
+            ...(deviceIdRef.current
+              ? { deviceId: { exact: deviceIdRef.current } }
+              : {}),
           },
         });
+        watchTrack(stream);
+        void refreshDevices();
         stream.getAudioTracks().forEach((t) => (t.enabled = !startMuted));
         localStreamRef.current = stream;
         const Ctx =
@@ -258,9 +367,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         void audioCtxRef.current?.resume().catch(() => {});
         if (myUserId) addAnalyser(myUserId, stream);
 
-        const res = await monoEmit<{ peers: string[] }>("mono:voice:join", {
-          muted: startMuted,
-        });
+        const res = await monoEmit<{ peers: string[] }>(
+          `${prefix}:voice:join`,
+          {
+            muted: startMuted,
+          },
+        );
         if (!res.ok || !res.data) {
           teardown();
           toast.error(res.error ?? "Không bật được voice chat");
@@ -287,7 +399,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         setConnecting(false);
       }
     },
-    [supported, myUserId, addAnalyser, teardown, code, createPeer],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [supported, myUserId, addAnalyser, teardown, code, createPeer, prefix],
   );
 
   const leave = useCallback(() => {
@@ -296,8 +409,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     setEnabled(false);
     writePref(code, null);
     teardown();
-    void monoEmit("mono:voice:leave");
-  }, [code, teardown]);
+    void monoEmit(`${prefix}:voice:leave`);
+  }, [code, teardown, prefix]);
+
+  useEffect(() => {
+    leaveRef.current = leave;
+  }, [leave]);
 
   const toggleMute = useCallback(() => {
     const next = !mutedRef.current;
@@ -308,9 +425,9 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       .forEach((t) => (t.enabled = !next));
     if (enabledRef.current) {
       writePref(code, next ? "muted" : "on");
-      void monoEmit("mono:voice:mute", { muted: next });
+      void monoEmit(`${prefix}:voice:mute`, { muted: next });
     }
-  }, [code]);
+  }, [code, prefix]);
 
   const resumeAudio = useCallback(() => {
     void audioCtxRef.current?.resume().catch(() => {});
@@ -355,19 +472,21 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    socket.on("mono:voice:users", onUsers);
-    socket.on("mono:voice:left", onLeft);
-    socket.on("mono:voice:signal", onSignal);
+    socket.on(`${prefix}:voice:users`, onUsers);
+    socket.on(`${prefix}:voice:left`, onLeft);
+    socket.on(`${prefix}:voice:signal`, onSignal);
     // Lấy danh sách người đang bật voice khi vừa vào phòng
-    void monoEmit<{ users: VoiceUser[] }>("mono:voice:list").then((res) => {
-      if (res.ok && res.data) onUsers(res.data);
-    });
+    void monoEmit<{ users: VoiceUser[] }>(`${prefix}:voice:list`).then(
+      (res) => {
+        if (res.ok && res.data) onUsers(res.data);
+      },
+    );
     return () => {
-      socket.off("mono:voice:users", onUsers);
-      socket.off("mono:voice:left", onLeft);
-      socket.off("mono:voice:signal", onSignal);
+      socket.off(`${prefix}:voice:users`, onUsers);
+      socket.off(`${prefix}:voice:left`, onLeft);
+      socket.off(`${prefix}:voice:signal`, onSignal);
     };
-  }, [closePeer, createPeer, flushIce, sendSignal]);
+  }, [closePeer, createPeer, flushIce, sendSignal, prefix]);
 
   // Mất kết nối rồi kết nối lại -> server đã cho mình rời voice -> vào lại
   useEffect(() => {
@@ -397,12 +516,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   // Rời phòng -> tắt voice & quên lựa chọn (tải lại trang thì không chạy -> vẫn tự bật lại)
   useEffect(
     () => () => {
-      if (enabledRef.current) void monoEmit("mono:voice:leave");
+      if (enabledRef.current) void monoEmit(`${prefix}:voice:leave`);
       enabledRef.current = false;
       writePref(code, null);
       teardown();
     },
-    [teardown, code],
+    [teardown, code, prefix],
   );
 
   return (
@@ -419,6 +538,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         leave,
         toggleMute,
         resumeAudio,
+        peerStates,
+        volume,
+        setVolume,
+        devices,
+        deviceId,
+        selectDevice,
       }}
     >
       {children}
