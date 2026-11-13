@@ -14,13 +14,28 @@ import { socket } from "@/lib/socket";
 import { monoEmit } from "@/lib/monopolySocket";
 import { useRoom } from "../../monopoly/_context/RoomContext";
 import {
+  DEFAULT_PHYSICS,
+  checkCueClearance,
+  sanitizeShot,
   validateShotInput,
   type BallId,
+  type CueClearance,
   type ShotCommand,
 } from "../_lib/physics";
+import { useShotInput, type ShotInput } from "../../_shared/shot/useShotInput";
+import { getShotSettings, useShotSettings, type ShotSettings } from "../../_shared/shot/shotSettings";
+import { powerCurve } from "../../_shared/shot/shotMath";
 import { restSamples, sampleFrames, type BallSample } from "../_lib/playback";
 import { billiardSound } from "../_lib/sound";
 import type { BilliardMatch, ShotRecord } from "../_lib/types";
+
+/**
+ * Đường cong lực của Bida Carom: engine tuyến tính (v = vmin + (vmax − vmin)·p) nên UI áp
+ * p = d^1.4 để vùng lực thấp (cú chạm nhẹ, kiểm soát vị trí bi) có độ phân giải cao hơn.
+ */
+export const CAROM_POWER_EXP = 1.4;
+/** Góc nâng cơ mặc định của Bida Carom (độ) */
+export const DEFAULT_ELEVATION = 5;
 
 /** Cài đặt riêng của người chơi (lưu trên trình duyệt) */
 export interface BilliardPrefs {
@@ -64,7 +79,17 @@ interface BilliardGameContextType {
   shooting: boolean;
   aim: AimState;
   setAim: (patch: Partial<AimState>) => void;
-  shoot: () => Promise<void>;
+  /** pullD: mức kéo cơ 0..1 lúc thả tay (đã qua đường cong lực ở đây) */
+  shoot: (pullD?: number) => Promise<void>;
+  /** Điều khiển đánh bi: kéo cơ -> thả = đánh */
+  shot: ShotInput;
+  shotSettings: ShotSettings;
+  /** Xoay hướng ngắm (độ, dương = ngược chiều kim đồng hồ) */
+  rotateAim: (deg: number) => void;
+  /** Cú vừa thả tay (để vẽ cơ đẩy tới chạm bi trước khi bi chạy) */
+  strokeRef: React.MutableRefObject<StrokeInfo | null>;
+  /** Kiểm tra cơ có vướng bàn / băng / bi khác không (null khi chưa tới lượt) */
+  clearance: CueClearance | null;
   /** Thời điểm hết lượt theo đồng hồ máy mình (ms) */
   turnDeadlineLocal: number;
   /** Kết quả cú vừa đánh (hiện thông báo sau khi bi dừng) */
@@ -78,6 +103,15 @@ interface BilliardGameContextType {
   /** Lượt & điểm HIỂN THỊ: giữ như trước cú đánh cho tới khi bi dừng (không lộ kết quả sớm) */
   displayTurn: number;
   displayScores: number[];
+}
+
+/** Thời gian cây cơ đẩy tới chạm bi (ms) */
+export const STROKE_MS = 100;
+export interface StrokeInfo {
+  t0: number;
+  d: number;
+  aim: AimState;
+  cue: [number, number];
 }
 
 const Ctx = createContext<BilliardGameContextType | null>(null);
@@ -111,12 +145,14 @@ export function BilliardGameProvider({
   const [aim, setAimState] = useState<AimState>({
     dirX: 1,
     dirY: 0,
-    power: 0.45,
+    // power = mức kéo cơ hiện tại (0 = chưa kéo)
+    power: 0,
     tipX: 0,
     tipY: 0,
-    elevation: 5,
+    elevation: DEFAULT_ELEVATION,
   });
 
+  const strokeRef = useRef<StrokeInfo | null>(null);
   const matchRef = useRef<BilliardMatch | null>(null);
   const playbackRef = useRef<Playback | null>(null);
 
@@ -142,8 +178,17 @@ export function BilliardGameProvider({
     billiardSound.setVolume(prefs.sfxVolume);
   }, [prefs.sfxVolume]);
 
+  const shotSettings = useShotSettings();
   const setAim = useCallback((patch: Partial<AimState>) => {
     setAimState((prev) => ({ ...prev, ...patch }));
+  }, []);
+  const rotateAim = useCallback((deg: number) => {
+    setAimState((a) => {
+      const r = (deg * Math.PI) / 180;
+      const c = Math.cos(r);
+      const sn = Math.sin(r);
+      return { ...a, dirX: a.dirX * c - a.dirY * sn, dirY: a.dirX * sn + a.dirY * c };
+    });
   }, []);
 
   // ---------- Nhận trạng thái chính thức từ server ----------
@@ -258,7 +303,7 @@ export function BilliardGameProvider({
   const canShoot =
     isMyTurn && !animating && !shooting && settledSeq === match?.seq;
 
-  const shoot = useCallback(async () => {
+  const shoot = useCallback(async (pullD?: number) => {
     const m = matchRef.current;
     if (!m || shooting) return;
     billiardSound.unlock();
@@ -268,7 +313,7 @@ export function BilliardGameProvider({
     } = {
       dirX: aim.dirX,
       dirY: aim.dirY,
-      power: aim.power,
+      power: powerCurve(pullD ?? aim.power, CAROM_POWER_EXP),
       tipX: aim.tipX,
       tipY: aim.tipY,
       elevation: aim.elevation,
@@ -282,6 +327,9 @@ export function BilliardGameProvider({
       return;
     }
     setShooting(true);
+    strokeRef.current = { t0: performance.now(), d: pullD ?? aim.power, aim: { ...aim }, cue: m.balls[m.turn] };
+    // Cơ trở về vị trí đầu; tuỳ chọn tự đưa điểm chạm về tâm và góc cơ về mặc định sau mỗi cú
+    setAimState((a) => ({ ...a, power: 0, ...(getShotSettings().resetAfterShot ? { tipX: 0, tipY: 0, elevation: DEFAULT_ELEVATION } : null) }));
     let res = await monoEmit("bida:shoot", cmd);
     // Mất kết nối giữa chừng -> gửi lại CÙNG shotId (server không xử lý 2 lần)
     if (!res.ok && res.error?.startsWith("Mất kết nối"))
@@ -289,6 +337,36 @@ export function BilliardGameProvider({
     setShooting(false);
     if (!res.ok) toast.error(res.error ?? "Không đánh được, hãy thử lại");
   }, [aim, shooting]);
+
+  // Cơ vướng bàn / băng / bi khác -> thả tay = huỷ, không đánh
+  const aimGeom = useMemo(
+    () => ({ dirX: aim.dirX, dirY: aim.dirY, tipX: aim.tipX, tipY: aim.tipY, elevation: aim.elevation }),
+    [aim.dirX, aim.dirY, aim.tipX, aim.tipY, aim.elevation],
+  );
+  const clearance = useMemo<CueClearance | null>(() => {
+    if (!match || !isMyTurn) return null;
+    return checkCueClearance(
+      match.balls,
+      sanitizeShot({ ...aimGeom, power: 0.5 }, match.turn as BallId),
+      DEFAULT_PHYSICS,
+    );
+  }, [match, isMyTurn, aimGeom]);
+  const clearanceOk = useRef(true);
+  useEffect(() => {
+    clearanceOk.current = !clearance || clearance.ok;
+  });
+  const shot: ShotInput = useShotInput({
+    enabled: canShoot,
+    onPower: (d) => setAimState((a) => ({ ...a, power: d })),
+    onShoot: (d) => void shoot(d),
+    canRelease: () => {
+      if (clearanceOk.current) return true;
+      toast.error("Cơ đang vướng — hãy nâng góc cơ hoặc đổi hướng ngắm");
+      return false;
+    },
+    onTick: (d) => billiardSound.play("pull", d),
+    haptics: shotSettings.haptics,
+  });
 
   // Đổi lượt -> âm báo nhẹ
   const turnKey = match ? `${match.startedAt}:${match.turn}` : "";
@@ -321,6 +399,11 @@ export function BilliardGameProvider({
       aim,
       setAim,
       shoot,
+      shot,
+      shotSettings,
+      rotateAim,
+      clearance,
+      strokeRef,
       turnDeadlineLocal: (match?.turnDeadline ?? 0) - clockOffset,
       lastVerdict,
       prefs,
@@ -340,6 +423,11 @@ export function BilliardGameProvider({
       aim,
       setAim,
       shoot,
+      shot,
+      shotSettings,
+      rotateAim,
+      clearance,
+      strokeRef,
       clockOffset,
       lastVerdict,
       prefs,

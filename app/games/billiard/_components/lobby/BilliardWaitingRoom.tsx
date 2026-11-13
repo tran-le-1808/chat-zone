@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { useState } from "react";
 import {
   CircleDot,
@@ -142,8 +143,16 @@ export default function BilliardWaitingRoom() {
             {isHost && !isMe && (
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm(`Mời ${player.name} ra khỏi phòng?`))
+                onClick={async () => {
+                  if (
+                    await confirmDialog({
+                      title: `Mời ${player.name} ra khỏi phòng?`,
+                      message: "Người chơi sẽ bị đưa ra khỏi phòng chờ.",
+                      confirmText: "Mời ra",
+                      tone: "danger",
+                      icon: UserX,
+                    })
+                  )
                     void kickPlayer(player.userId);
                 }}
                 title="Mời ra khỏi phòng"

@@ -1,18 +1,16 @@
 "use client";
 
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { useEffect, useState } from "react";
+import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useRoom } from "../../../monopoly/_context/RoomContext";
 import GameChat from "../../../monopoly/_components/GameChat";
-import VoiceControls from "../../../monopoly/_components/VoiceControls";
 import RotateDeviceOverlay from "../../../monopoly/_components/ui/RotateDeviceOverlay";
 import { useBilliard } from "../../_context/BilliardGameContext";
-import { BALL_COLORS, BALL_NAMES } from "../../_lib/types";
-import { useIsPhoneLandscape } from "../../../monopoly/_components/ui/useScreen";
-import ElevationControl from "./ElevationControl";
 import BilliardScene from "./BilliardScene";
 import Scoreboard from "./Scoreboard";
-import ShotControls from "./ShotControls";
+import ShotControls, { useCaromStatus } from "./ShotControls";
 import ResultModal from "./ResultModal";
 import SettingsPanel from "./SettingsPanel";
 
@@ -21,7 +19,7 @@ function DebugPanel() {
   const { match, animating, clockOffset } = useBilliard();
   const last = match?.lastShot;
   return (
-    <div className="pointer-events-none absolute bottom-3 left-3 z-20 max-w-[260px] rounded-xl bg-black/70 p-2 font-mono text-[10px] leading-relaxed text-emerald-200">
+    <div className="pointer-events-none absolute left-24 top-2 z-20 max-w-[260px] rounded-xl bg-black/70 p-2 font-mono text-[10px] leading-relaxed text-emerald-200">
       <div>
         seq: {match?.seq} · lượt: {match?.turn} · lăn: {String(animating)}
       </div>
@@ -51,18 +49,9 @@ function DebugPanel() {
 
 export default function BilliardGame() {
   const { code, room, leaveRoom } = useRoom();
-  const {
-    match,
-    lastVerdict,
-    prefs,
-    myIndex,
-    aim,
-    setAim,
-    canShoot,
-    displayTurn,
-  } = useBilliard();
-  const isLandscape = useIsPhoneLandscape();
+  const { match, lastVerdict, prefs, myIndex } = useBilliard();
   const [showSettings, setShowSettings] = useState(false);
+  const status = useCaromStatus();
 
   // Thông báo kết quả cú đánh (sau khi bi dừng)
   useEffect(() => {
@@ -79,12 +68,18 @@ export default function BilliardGame() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastVerdict?.seq]);
 
-  const handleLeave = () => {
+  const handleLeave = async () => {
     if (
       match &&
       match.winner === null &&
       myIndex >= 0 &&
-      !window.confirm("Rời phòng giữa trận sẽ bị xử thua. Bạn chắc chắn chứ?")
+      !(await confirmDialog({
+        title: "Rời phòng giữa trận?",
+        message: "Rời phòng lúc này sẽ bị xử thua.",
+        confirmText: "Rời phòng",
+        cancelText: "Ở lại",
+        tone: "danger",
+      }))
     )
       return;
     void leaveRoom();
@@ -128,12 +123,12 @@ export default function BilliardGame() {
       `}</style>
 
       {/* Thanh trên (không đè lên bàn): phòng / cài đặt + bảng điểm */}
-      <header className="flex shrink-0 items-start gap-2 p-2 sm:p-3 [@media(max-height:500px)]:items-center [@media(max-height:500px)]:gap-1.5 [@media(max-height:500px)]:p-1">
-        <div className="flex shrink-0 items-center gap-1.5 rounded-2xl border border-white/10 bg-black/40 p-1.5 [@media(max-height:500px)]:gap-0.5 [@media(max-height:500px)]:rounded-xl [@media(max-height:500px)]:p-0.5">
+      <header className="flex shrink-0 items-center gap-1.5 px-1.5 py-1 [@media(max-height:500px)]:gap-1 [@media(max-height:500px)]:py-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-xl border border-white/10 bg-black/40 p-0.5">
           <button
             type="button"
             onClick={handleLeave}
-            className="rounded-xl px-2 py-1 text-xs font-bold text-rose-300 hover:bg-rose-500/20"
+            className="rounded-lg px-1.5 py-1 text-xs font-bold text-rose-300 hover:bg-rose-500/20"
             title="Rời phòng"
           >
             🚪<span className="hidden sm:inline"> Rời</span>
@@ -145,60 +140,51 @@ export default function BilliardGame() {
             type="button"
             onClick={() => setShowSettings(true)}
             aria-label="Cài đặt"
-            className="rounded-xl px-2 py-1 text-sm hover:bg-white/10"
+            className="rounded-lg px-1.5 py-1 text-sm hover:bg-white/10"
           >
             ⚙️
           </button>
         </div>
+        <GameChat
+          variant="modal"
+          trigger={({ onClick, unread }) => (
+            <button
+              type="button"
+              onClick={onClick}
+              aria-label="Mở chat"
+              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/40 text-slate-200 hover:bg-white/10"
+            >
+              <MessageCircle className="h-4 w-4" />
+              {unread > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#c81d25] px-1 text-[9px] font-black text-white">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </button>
+          )}
+        />
+        {status && (
+          <span title={status} className="hidden min-w-0 max-w-[30vw] shrink truncate rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-300 sm:block">
+            {status}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <Scoreboard />
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Điện thoại xoay ngang: cột trái hẹp chứa góc cơ + voice + nút chat (ở đáy) */}
-        {isLandscape && (
-          <aside className="flex min-h-0 w-16 shrink-0 flex-col items-center gap-1.5 overflow-hidden border-r border-white/10 bg-[#181a24] px-1 pb-[54px] pt-1.5">
-            <ElevationControl
-              orientation="vertical"
-              value={aim.elevation}
-              disabled={!canShoot}
-              ballColor={BALL_COLORS[displayTurn]}
-              onChange={(elevation) => setAim({ elevation })}
-            />
-            <VoiceControls variant="stack" />
-          </aside>
-        )}
-
         {/* Bàn bida: chiếm toàn bộ phần còn lại, camera tự canh vừa khung */}
         <div className="relative min-w-0 flex-1">
           <div className="absolute inset-0">
             <BilliardScene />
           </div>
           {prefs.debug && <DebugPanel />}
+          {/* Điều khiển đánh bi phủ lên bàn: thanh kéo cơ, bi cái nhỏ, ngắm tinh */}
+          <ShotControls />
         </div>
 
-        {/* Cột điều khiển bên phải (không che bàn) */}
-        <aside className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/10 bg-[#181a24] p-3 [@media(max-height:500px)]:w-40 [@media(max-height:500px)]:justify-center [@media(max-height:500px)]:gap-1.5 [@media(max-height:500px)]:p-1.5">
-          {myIndex >= 0 && !isLandscape && (
-            <div className="text-center text-[11px] text-gray-300">
-              Bi cái của bạn: <b>{BALL_NAMES[myIndex]}</b>
-            </div>
-          )}
-          <ShotControls showElevation={!isLandscape} />
-          {!isLandscape && (
-            <div className="mt-auto">
-              <VoiceControls variant="lobby" />
-            </div>
-          )}
-        </aside>
       </div>
-
-      {/* Chat dạng modal (nút 💬 ở góc dưới bên trái bàn) */}
-      <GameChat
-        variant="modal"
-        fabClassName="bottom-3 left-3 [@media(max-height:500px)]:bottom-2 [@media(max-height:500px)]:left-2 [@media(max-height:500px)]:h-11 [@media(max-height:500px)]:w-11 [@media(max-height:500px)]:text-xl"
-      />
 
       <ResultModal />
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}

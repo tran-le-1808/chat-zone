@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ReduxProvider from "@/redux/provider";
 import { Toaster } from "sonner";
+import { ConfirmHost } from "@/components/ui/ConfirmDialog";
 import MainLayout from "@/components/layout/MainLayout";
 import AuthInitializer from "@/components/providers/AuthInitializer";
 import SocketProvider from "@/components/providers/SocketProvider";
@@ -44,6 +45,7 @@ export default function RootLayout({
           </SocketProvider>
         </ReduxProvider>
         <Toaster position="top-right" richColors closeButton />
+        <ConfirmHost />
       </body>
     </html>
   );

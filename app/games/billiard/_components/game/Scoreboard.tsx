@@ -33,7 +33,7 @@ function TurnTimer({
   const urgent = remain <= 10 && !paused;
   return (
     <div className="flex w-full items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10 [@media(max-height:500px)]:h-1">
+      <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
         <div
           className={`h-full rounded-full transition-[width] duration-200 ${urgent ? "bg-rose-500" : "bg-emerald-400"}`}
           style={{ width: `${pct}%` }}
@@ -68,7 +68,7 @@ export default function Scoreboard() {
     return (
       <div
         key={uid}
-        className={`flex min-w-0 flex-1 items-center gap-2 rounded-2xl border px-2.5 py-1.5 transition sm:px-3 sm:py-2 [@media(max-height:500px)]:gap-1.5 [@media(max-height:500px)]:rounded-xl [@media(max-height:500px)]:px-2 [@media(max-height:500px)]:py-0.5 ${
+        className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 py-0.5 transition sm:px-2.5 sm:py-1 [@media(max-height:500px)]:gap-1.5 [@media(max-height:500px)]:rounded-xl [@media(max-height:500px)]:px-2 [@media(max-height:500px)]:py-0.5 ${
           active
             ? "border-emerald-400/70 bg-emerald-500/15 shadow-[0_0_18px_rgba(52,211,153,0.25)]"
             : "border-white/10 bg-black/40 opacity-75"
@@ -108,7 +108,7 @@ export default function Scoreboard() {
           </div>
         </div>
         <div className="shrink-0 text-center [@media(max-height:500px)]:flex [@media(max-height:500px)]:items-baseline [@media(max-height:500px)]:gap-0.5">
-          <div className="text-xl font-black tabular-nums sm:text-2xl [@media(max-height:500px)]:text-base">
+          <div className="text-lg font-black tabular-nums sm:text-xl [@media(max-height:500px)]:text-base">
             {displayScores[i]}
           </div>
           <div className="text-[10px] text-gray-400">/{match.target}</div>
@@ -118,7 +118,7 @@ export default function Scoreboard() {
   });
 
   return (
-    <div className="w-full space-y-1 [@media(max-height:500px)]:space-y-0.5">
+    <div className="w-full space-y-0.5">
       <div className="flex items-stretch gap-2">
         {cards[0]}
         <div className="hidden shrink-0 flex-col items-center justify-center px-1 text-center sm:flex">

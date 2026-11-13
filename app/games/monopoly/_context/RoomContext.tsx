@@ -60,14 +60,16 @@ interface RoomContextType {
 const RoomContext = createContext<RoomContextType | null>(null);
 
 /** Các game dùng chung hệ thống phòng (mỗi game có tiền tố sự kiện socket riêng) */
-export type RoomGame = "monopoly" | "billiard";
+export type RoomGame = "monopoly" | "billiard" | "pool";
 const GAME_PREFIX: Record<RoomGame, string> = {
   monopoly: "mono",
   billiard: "bida",
+  pool: "pool",
 };
 const GAME_PATH: Record<RoomGame, string> = {
   monopoly: "/games/monopoly",
   billiard: "/games/billiard",
+  pool: "/games/pool",
 };
 
 export function RoomProvider({

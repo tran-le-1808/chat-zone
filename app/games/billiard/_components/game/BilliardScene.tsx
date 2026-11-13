@@ -10,6 +10,7 @@ import Balls3D from "./Balls3D";
 import AimLayer from "./AimLayer";
 import { useBilliard } from "../../_context/BilliardGameContext";
 import { useIsCompact } from "../../../monopoly/_components/ui/useScreen";
+import { aimTowards, onCueShaft, pullFromAlong, rotatedAim } from "../../../_shared/shot/shotMath";
 
 /** Camera canh vừa bàn theo tỉ lệ màn hình; đổi chế độ nhìn thì đặt lại */
 function CameraRig({ mode }: { mode: "top" | "angle" }) {
@@ -22,35 +23,53 @@ function CameraRig({ mode }: { mode: "top" | "angle" }) {
     const aspect = size.width / Math.max(1, size.height);
     const fov = (cam.fov * Math.PI) / 180;
     // Khoảng cách để cả bàn lọt khung (theo chiều dọc & ngang)
-    const fitH = TABLE_OUTER.h / 2 / Math.tan(fov / 2);
-    const fitW = TABLE_OUTER.w / 2 / (Math.tan(fov / 2) * aspect);
-    const dist = Math.max(fitH, fitW) * 1.08;
+    // Bàn to hơn: bỏ ~8 cm viền gỗ ngoài cùng mỗi phía khỏi khung hình
+    const fitH = (TABLE_OUTER.h - 0.16) / 2 / Math.tan(fov / 2);
+    const fitW = (TABLE_OUTER.w - 0.16) / 2 / (Math.tan(fov / 2) * aspect);
+    const dist = Math.max(fitH, fitW) * (mode === "top" ? 1 : 0.99);
     if (mode === "top") cam.position.set(0, dist, 0.001);
     else cam.position.set(0, dist * 0.82, dist * 0.62);
-    cam.lookAt(0, 0, 0);
+    // Góc nghiêng: nhìn lệch về phía gần camera một chút để bàn lấp đầy khung (không thừa khoảng trống phía trên)
+    const lookZ = mode === "top" ? 0 : 0.14;
+    cam.lookAt(0, 0, lookZ);
     cam.updateProjectionMatrix();
     if (controls) {
-      controls.target.set(0, 0, 0);
+      controls.target.set(0, 0, lookZ);
       controls.update();
     }
   }, [camera, size.width, size.height, mode, controls]);
   return null;
 }
 
-/** Mặt phẳng nhận thao tác ngắm: kéo / chạm để chọn hướng từ bi cái tới điểm chạm */
+/**
+ * Mặt phẳng nhận thao tác ngắm. Cảm ứng ngắm TƯƠNG ĐỐI (xoay quanh bi cái theo độ lệch góc
+ * của ngón tay, không bị nhảy); chuột trỏ thẳng điểm ngắm. Có tuỳ chọn kéo cơ trực tiếp trên
+ * bàn. Đang mở bi lớn thì khoá hết.
+ */
 function AimInput() {
-  const { match, canShoot, setAim } = useBilliard();
-  const dragging = useRef(false);
+  const { match, canShoot, setAim, aim, shot, shotSettings } = useBilliard();
+  const drag = useRef<{
+    kind: "aim" | "pull";
+    id: number;
+    startAngle: number;
+    fingerStart: number;
+    along0: number;
+    relative: boolean;
+  } | null>(null);
 
-  const aimAt = (e: ThreeEvent<PointerEvent>) => {
-    if (!match) return;
-    const [cx, cy] = match.balls[match.turn];
-    const px = e.point.x;
-    const py = -e.point.z;
-    const dx = px - cx;
-    const dy = py - cy;
+  const cue = () => (match ? match.balls[match.turn] : null);
+  const aimAt = (x: number, y: number) => {
+    const c = cue();
+    if (!c) return;
+    const dx = x - c[0];
+    const dy = y - c[1];
     if (Math.hypot(dx, dy) < 0.01) return;
     setAim({ dirX: dx, dirY: dy });
+  };
+  const end = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.kind === "aim") shot.aimEnd();
   };
 
   return (
@@ -59,15 +78,63 @@ function AimInput() {
       position={[0, 0.03, 0]}
       onPointerDown={(e) => {
         // Chuột trái / 1 ngón: ngắm. Chuột phải / 2 ngón: xoay camera (OrbitControls)
-        if (!canShoot || (e.pointerType === "mouse" && e.button !== 0)) return;
-        dragging.current = true;
-        aimAt(e);
+        if (!canShoot || shot.inputLocked || drag.current || (e.pointerType === "mouse" && e.button !== 0)) return;
+        const c = cue();
+        const p = { x: e.point.x, y: -e.point.z };
+        if (c && shotSettings.pullOnTable) {
+          const hit = onCueShaft({ x: c[0], y: c[1] }, { x: aim.dirX, y: aim.dirY }, p);
+          if (hit.hit && shot.pullStart()) {
+            drag.current = { kind: "pull", id: e.pointerId, startAngle: 0, fingerStart: 0, along0: hit.along, relative: false };
+            return;
+          }
+        }
+        shot.aimStart();
+        // Chạm / click ở đâu trên bàn thì ngắm tới đó ngay (không cần kéo); kéo tiếp thì xoay mượt quanh bi cái
+        const toward = c ? aimTowards({ x: c[0], y: c[1] }, p) : null;
+        if (toward) setAim({ dirX: toward.dirX, dirY: toward.dirY });
+        const startAngle = toward ? toward.angle : Math.atan2(aim.dirY, aim.dirX);
+        drag.current = {
+          kind: "aim",
+          id: e.pointerId,
+          relative: e.pointerType !== "mouse" && !!c,
+          along0: 0,
+          startAngle,
+          fingerStart: startAngle,
+        };
       }}
       onPointerMove={(e) => {
-        if (dragging.current && canShoot) aimAt(e);
+        const d = drag.current;
+        if (!d || d.id !== e.pointerId || !canShoot) return;
+        const c = cue();
+        if (!c) return;
+        const p = { x: e.point.x, y: -e.point.z };
+        if (d.kind === "pull") {
+          const { along } = onCueShaft({ x: c[0], y: c[1] }, { x: aim.dirX, y: aim.dirY }, p, 1e9, 1e9);
+          shot.pullMove(pullFromAlong(d.along0, along, shotSettings.pullSensitivity));
+        } else if (d.relative) {
+          const ang = rotatedAim(d.startAngle, d.fingerStart, Math.atan2(p.y - c[1], p.x - c[0]), shotSettings.aimSensitivity);
+          setAim({ dirX: Math.cos(ang), dirY: Math.sin(ang) });
+        } else aimAt(p.x, p.y);
       }}
-      onPointerUp={() => (dragging.current = false)}
-      onPointerLeave={() => (dragging.current = false)}
+      onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+        const d = drag.current;
+        if (!d || d.id !== e.pointerId) return;
+        if (d.kind === "pull") {
+          drag.current = null;
+          const c = cue();
+          const along = c ? onCueShaft({ x: c[0], y: c[1] }, { x: aim.dirX, y: aim.dirY }, { x: e.point.x, y: -e.point.z }, 1e9, 1e9).along : d.along0;
+          shot.pullRelease(pullFromAlong(d.along0, along, shotSettings.pullSensitivity));
+          return;
+        }
+        end();
+      }}
+      onPointerCancel={() => {
+        if (drag.current?.kind === "pull") shot.pullCancel();
+        end();
+      }}
+      onPointerLeave={() => {
+        if (drag.current?.kind !== "pull") end();
+      }}
     >
       <planeGeometry args={[TABLE_OUTER.w + 2, TABLE_OUTER.h + 2]} />
       <meshBasicMaterial visible={false} />

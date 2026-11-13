@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import Monopoly3DScene from "./Board3D";
 import DiceRoller3D from "./DiceRoller3D";
@@ -79,12 +80,18 @@ export default function GameBoard() {
   const isTravelSelecting =
     isMyTurn && currPlayer.canTeleport && !currPlayer.inJail;
 
-  const handleLeave = () => {
+  const handleLeave = async () => {
     if (!roomCtx) return;
     const inGame = !winner && roomCtx.room?.status === "playing";
     if (
       inGame &&
-      !window.confirm("Rời phòng lúc này sẽ bị xử thua. Bạn chắc chắn chứ?")
+      !(await confirmDialog({
+        title: "Rời phòng giữa ván?",
+        message: "Rời phòng lúc này sẽ bị xử thua.",
+        confirmText: "Rời phòng",
+        cancelText: "Ở lại",
+        tone: "danger",
+      }))
     )
       return;
     void roomCtx.leaveRoom();

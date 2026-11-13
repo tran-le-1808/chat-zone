@@ -14,6 +14,7 @@ import {
   Play,
   Search,
   SearchX,
+  Target,
   Users,
   X,
   type LucideIcon,
@@ -58,6 +59,18 @@ const GAMES_LIST: GameItem[] = [
     bannerBg: "from-[#0b4d3a] via-[#11704f] to-[#c2621f]",
     isAvailable: true,
     slug: "/games/billiard",
+  },
+  {
+    id: "6",
+    title: "Bida Lỗ (Pool)",
+    description:
+      "Bàn 9 feet với 8 bi & 9 bi luật WPA: vật lý thật (đi sau, kéo về, throw, rung mép lỗ), trọng tài tự động, đấu máy 3 cấp độ.",
+    category: "Thể thao",
+    players: "1 - 2 người",
+    icon: Target,
+    bannerBg: "from-[#0b3d2e] via-[#0f6b52] to-[#7f1118]",
+    isAvailable: true,
+    slug: "/games/pool",
   },
   {
     id: "1",

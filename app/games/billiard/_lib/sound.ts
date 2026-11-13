@@ -4,9 +4,10 @@
  * Âm thanh chỉ là phản hồi — không ảnh hưởng vật lý.
  */
 export type SfxKind =
-  "cue" | "ball" | "cushion" | "score" | "miss" | "win" | "turn";
+  "pull" | "cue" | "ball" | "cushion" | "score" | "miss" | "win" | "turn";
 
 const MIN_GAP_MS: Record<SfxKind, number> = {
+  pull: 70,
   cue: 60,
   ball: 35,
   cushion: 45,
@@ -58,6 +59,10 @@ class BilliardSound {
     if (!ctx || !this.master) return;
     const k = Math.max(0.05, Math.min(1, intensity));
     switch (kind) {
+      case "pull":
+        // Tiếng kéo cơ: tích tắc ngắn, cao độ tăng theo lực
+        this.click(ctx, 260 + 520 * k, 0.03, 0.12);
+        break;
       case "ball":
         this.click(ctx, 2600, 0.035, 0.55 * k);
         this.click(ctx, 5200, 0.02, 0.25 * k);

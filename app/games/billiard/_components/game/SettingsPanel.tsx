@@ -1,5 +1,6 @@
 "use client";
 
+import ShotSettingsFields from "../../../_shared/shot/ShotSettingsFields";
 import { useOptionalVoice } from "../../../monopoly/_context/VoiceContext";
 import { useBilliard } from "../../_context/BilliardGameContext";
 
@@ -113,10 +114,14 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           />
         </Row>
 
+        <div className="mt-3">
+          <ShotSettingsFields />
+        </div>
+
         <p className="mt-3 text-[11px] leading-relaxed text-gray-500">
-          Chuột trái / 1 ngón: ngắm · Chuột phải / 2 ngón: xoay camera · Lăn
-          chuột / chụm 2 ngón: phóng to. Phím ←/→ ngắm (giữ Shift để chỉnh mịn),
-          ↑/↓ lực, Space đánh.
+          Kéo ngón trên bàn: ngắm · Chạm bi cái nhỏ: chỉnh điểm chạm · Kéo cơ ở
+          thanh bên rồi thả: đánh · 2 ngón: xoay / phóng to camera. Desktop: Space
+          giữ để lấy lực, thả để đánh · Esc huỷ · ←/→ ngắm (Shift: chỉnh mịn).
         </p>
       </div>
     </div>
