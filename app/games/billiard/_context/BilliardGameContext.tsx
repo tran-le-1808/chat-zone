@@ -23,7 +23,11 @@ import {
   type ShotCommand,
 } from "../_lib/physics";
 import { useShotInput, type ShotInput } from "../../_shared/shot/useShotInput";
-import { getShotSettings, useShotSettings, type ShotSettings } from "../../_shared/shot/shotSettings";
+import {
+  getShotSettings,
+  useShotSettings,
+  type ShotSettings,
+} from "../../_shared/shot/shotSettings";
 import { powerCurve } from "../../_shared/shot/shotMath";
 import { restSamples, sampleFrames, type BallSample } from "../_lib/playback";
 import { billiardSound } from "../_lib/sound";
@@ -45,7 +49,7 @@ export interface BilliardPrefs {
 }
 const DEFAULT_PREFS: BilliardPrefs = {
   sfxVolume: 0.7,
-  camera: "angle",
+  camera: "top",
   debug: false,
 };
 const PREFS_KEY = "billiard-prefs";
@@ -187,7 +191,11 @@ export function BilliardGameProvider({
       const r = (deg * Math.PI) / 180;
       const c = Math.cos(r);
       const sn = Math.sin(r);
-      return { ...a, dirX: a.dirX * c - a.dirY * sn, dirY: a.dirX * sn + a.dirY * c };
+      return {
+        ...a,
+        dirX: a.dirX * c - a.dirY * sn,
+        dirY: a.dirX * sn + a.dirY * c,
+      };
     });
   }, []);
 
@@ -303,44 +311,64 @@ export function BilliardGameProvider({
   const canShoot =
     isMyTurn && !animating && !shooting && settledSeq === match?.seq;
 
-  const shoot = useCallback(async (pullD?: number) => {
-    const m = matchRef.current;
-    if (!m || shooting) return;
-    billiardSound.unlock();
-    const cmd: Omit<ShotCommand, "cue"> & {
-      shotId: string;
-      expectedSeq: number;
-    } = {
-      dirX: aim.dirX,
-      dirY: aim.dirY,
-      power: powerCurve(pullD ?? aim.power, CAROM_POWER_EXP),
-      tipX: aim.tipX,
-      tipY: aim.tipY,
-      elevation: aim.elevation,
-      shotId: newShotId(),
-      expectedSeq: m.seq,
-    };
-    // Kiểm tra cùng quy tắc với server (góc cơ 0–90°, không NaN...) trước khi gửi
-    const invalid = validateShotInput(cmd);
-    if (invalid) {
-      toast.error(invalid);
-      return;
-    }
-    setShooting(true);
-    strokeRef.current = { t0: performance.now(), d: pullD ?? aim.power, aim: { ...aim }, cue: m.balls[m.turn] };
-    // Cơ trở về vị trí đầu; tuỳ chọn tự đưa điểm chạm về tâm và góc cơ về mặc định sau mỗi cú
-    setAimState((a) => ({ ...a, power: 0, ...(getShotSettings().resetAfterShot ? { tipX: 0, tipY: 0, elevation: DEFAULT_ELEVATION } : null) }));
-    let res = await monoEmit("bida:shoot", cmd);
-    // Mất kết nối giữa chừng -> gửi lại CÙNG shotId (server không xử lý 2 lần)
-    if (!res.ok && res.error?.startsWith("Mất kết nối"))
-      res = await monoEmit("bida:shoot", cmd);
-    setShooting(false);
-    if (!res.ok) toast.error(res.error ?? "Không đánh được, hãy thử lại");
-  }, [aim, shooting]);
+  const shoot = useCallback(
+    async (pullD?: number) => {
+      const m = matchRef.current;
+      if (!m || shooting) return;
+      billiardSound.unlock();
+      const cmd: Omit<ShotCommand, "cue"> & {
+        shotId: string;
+        expectedSeq: number;
+      } = {
+        dirX: aim.dirX,
+        dirY: aim.dirY,
+        power: powerCurve(pullD ?? aim.power, CAROM_POWER_EXP),
+        tipX: aim.tipX,
+        tipY: aim.tipY,
+        elevation: aim.elevation,
+        shotId: newShotId(),
+        expectedSeq: m.seq,
+      };
+      // Kiểm tra cùng quy tắc với server (góc cơ 0–90°, không NaN...) trước khi gửi
+      const invalid = validateShotInput(cmd);
+      if (invalid) {
+        toast.error(invalid);
+        return;
+      }
+      setShooting(true);
+      strokeRef.current = {
+        t0: performance.now(),
+        d: pullD ?? aim.power,
+        aim: { ...aim },
+        cue: m.balls[m.turn],
+      };
+      // Cơ trở về vị trí đầu; tuỳ chọn tự đưa điểm chạm về tâm và góc cơ về mặc định sau mỗi cú
+      setAimState((a) => ({
+        ...a,
+        power: 0,
+        ...(getShotSettings().resetAfterShot
+          ? { tipX: 0, tipY: 0, elevation: DEFAULT_ELEVATION }
+          : null),
+      }));
+      let res = await monoEmit("bida:shoot", cmd);
+      // Mất kết nối giữa chừng -> gửi lại CÙNG shotId (server không xử lý 2 lần)
+      if (!res.ok && res.error?.startsWith("Mất kết nối"))
+        res = await monoEmit("bida:shoot", cmd);
+      setShooting(false);
+      if (!res.ok) toast.error(res.error ?? "Không đánh được, hãy thử lại");
+    },
+    [aim, shooting],
+  );
 
   // Cơ vướng bàn / băng / bi khác -> thả tay = huỷ, không đánh
   const aimGeom = useMemo(
-    () => ({ dirX: aim.dirX, dirY: aim.dirY, tipX: aim.tipX, tipY: aim.tipY, elevation: aim.elevation }),
+    () => ({
+      dirX: aim.dirX,
+      dirY: aim.dirY,
+      tipX: aim.tipX,
+      tipY: aim.tipY,
+      elevation: aim.elevation,
+    }),
     [aim.dirX, aim.dirY, aim.tipX, aim.tipY, aim.elevation],
   );
   const clearance = useMemo<CueClearance | null>(() => {
