@@ -78,10 +78,12 @@ export function innerDirection(tileId: number): [number, number] {
   switch (side) {
     case 0:
       return [0, -1];
+    // Dãy 2 & 3 (từ Nhà tù tới Du lịch): dải màu đặt ở mép SAU (phía trên màn hình),
+    // ngay dưới nhà; tên & giá nằm phía dưới, nên nhà cao không che chữ
     case 1:
-      return [1, 0];
+      return [-1, 0];
     case 2:
-      return [0, 1];
+      return [0, -1];
     default:
       return [-1, 0];
   }

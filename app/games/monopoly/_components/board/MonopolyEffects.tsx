@@ -239,7 +239,7 @@ export function RentDoubleEffects({
     players.forEach((p) => {
       const was = prevStates.current[p.id];
       const now = pawnStates[p.id] ?? "idle";
-      const travelled = (s: PawnState) => s === "moving" || s === "flying";
+      const travelled = (s: PawnState) => s === "moving" || s === "landing" || s === "flying";
       if (travelled(was) && !travelled(now)) {
         const tile = tiles[p.tileIndex];
         if (

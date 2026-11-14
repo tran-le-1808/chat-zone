@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:mono-anim": "node --import ./app/games/pool/_tests/register.mjs --test app/games/monopoly/_components/board/anim/_tests/*.test.ts",
     "test:pool": "node --import ./app/games/pool/_tests/register.mjs --test app/games/pool/_tests/*.test.ts",
     "pool:sync-shared": "node scripts/sync-pool-shared.mjs",
     "pool:pocket-map": "node --import ./app/games/pool/_tests/register.mjs app/games/pool/_tests/pocket-map.ts"

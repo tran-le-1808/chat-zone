@@ -22,12 +22,21 @@ export const ECONOMY_BASE = {
   stationRents: [0, 1200, 1600, 2400, 3200],
   /** Giá đất = basePrice (boardConfig) x landFactor */
   landFactor: 4,
-  /** Giá trọn gói (đất + n nhà) = giá đất x hệ số */
-  house1Factor: 1.4,
-  house2Factor: 1.8,
-  house3Factor: 2.2,
+  /**
+   * Giá trọn gói (đất + n nhà) = giá đất x hệ số.
+   * Giá MUA NHÀ đã giảm một nửa so với trước (phần nhà = (hệ số - 1) x giá đất:
+   * trước 0.4 / 0.8 / 1.2 -> nay 0.2 / 0.4 / 0.6; nâng Khách sạn 1.2 -> 0.6).
+   */
+  house1Factor: 1.2,
+  house2Factor: 1.4,
+  house3Factor: 1.6,
   /** Chi phí nâng 3 nhà lên Khách sạn = giá đất x hệ số */
-  villaFactor: 1.2,
+  villaFactor: 0.6,
+  /**
+   * Cơ sở tính TIỀN THUÊ: giữ NGUYÊN mức cũ (đất + n nhà / khách sạn) để tiền thuê không đổi
+   * dù giá mua nhà đã giảm. Chỉ dùng để tính tiền thuê, không phải giá phải trả.
+   */
+  rentBasis: { house1: 1.4, house2: 1.8, house3: 2.2, villa: 1.2 },
   /**
    * Tiền thuê = số tiền đã đầu tư vào ô (đất / đất + n nhà / khách sạn) x rentRate.
    * > 1 -> tiền thuê luôn lớn hơn giá mua. Đủ bộ màu x2, Lễ hội x2 (nhân thêm).

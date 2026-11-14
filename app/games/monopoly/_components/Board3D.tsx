@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useIsCompact } from "./ui/useScreen";
 import * as THREE from "three";
@@ -28,9 +28,22 @@ import {
 } from "./board/MonopolyEffects";
 import CityCenter from "./board/CityCenter";
 import CameraRig from "./board/CameraRig";
+import DustPool, { emitDust } from "./board/anim/DustPool";
+import { tileFx } from "./board/anim/tileFx";
+import { playStepLand } from "./board/anim/stepSound";
+import { clearMoveHint, getMoveHint } from "./board/anim/moveBus";
+import { moveFxEnabled, prefersReducedMotion } from "./board/anim/animSettings";
+import {
+  SLOTS,
+  T_STEP,
+  hopPose,
+  jitter,
+  landSpring,
+  volumeXZ,
+} from "./board/anim/stepTimeline";
 import { GoIcon3D, StationIcon3D } from "./board/SpecialIcons";
 import { BOARD_COLORS } from "./board/theme";
-import { BOARD_CAMERA, type BoardFitMode } from "./board/cameraConfig";
+import { BOARD_CAMERA, groundAxes, type BoardFitMode } from "./board/cameraConfig";
 
 export interface Player3D {
   id: number;
@@ -135,8 +148,6 @@ const HOP_MAX_S = 0.6;
 /** Độ cao cú nhảy (tăng theo khoảng cách, vd. bay tới ô Du lịch / bị bắt vào tù) */
 const HOP_BASE_HEIGHT = 0.7;
 const HOP_MAX_HEIGHT = 2.2;
-/** Nén người khi đáp xuống ô */
-const LAND_SQUASH_S = 0.16;
 
 // ---- Bay tới ô đích khi đi Du lịch ----
 /** Thời gian chuyến bay (giây) – khớp FLIGHT_MS trong GameContext */
@@ -148,155 +159,297 @@ const PLANE_SCALE = 0.9;
 const easeInOut = (p: number) =>
   p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
 
+/** Quân cờ đang ở các trạng thái "đang đi" (kể cả bước cuối "landing") */
+const isStepping = (s: PawnState) => s === "moving" || s === "landing";
+
+/** Điểm đứng mặc định nằm ở NỬA SAU ô (xa camera) để không che chữ giá/tên ở nửa trước */
+const STAND_REAR = 0.5;
+const TILE_UNIT = 2.7;
+const AXES = groundAxes(BOARD_CAMERA.azimuthDeg);
+
+/** Độ lệch (thế giới) của khe đứng: slot = (ngang, sâu) theo bề rộng ô */
+function standOffset(slot: [number, number], out: THREE.Vector3) {
+  return out
+    .set(0, 0, 0)
+    .addScaledVector(AXES.right, slot[0] * TILE_UNIT)
+    .addScaledVector(AXES.forward, slot[1] * TILE_UNIT + STAND_REAR);
+}
+
+type HopKind = "step" | "jump" | "flight";
+interface Hop {
+  kind: HopKind;
+  tile: number;
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  t: number;
+  dur: number;
+  H: number;
+  idx: number;
+  last: boolean;
+  fired: boolean;
+}
+
 function SmoothPawn({
-  targetPos,
+  playerId,
+  tileId,
+  getTilePos,
   type,
   state,
-  offset,
+  slot,
   color,
 }: {
-  targetPos: [number, number, number];
+  playerId: number;
+  tileId: number;
+  getTilePos: (id: number) => [number, number, number];
   type: PawnType;
   state: PawnState;
-  offset: [number, number];
+  /** Khe đứng (khi đã dừng) hoặc khe "đi qua" (khi đang nhảy ngang ô có quân khác) */
+  slot: [number, number];
   color: string;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
   const planeRef = useRef<THREE.Group>(null);
   const discRef = useRef<THREE.Mesh>(null);
+  const shadowRef = useRef<THREE.Mesh>(null);
   const puffRef = useRef<THREE.Mesh>(null);
   const stepRingRef = useRef<THREE.Mesh>(null);
-  const puffT = useRef(-1);
-  const stepRingT = useRef(-1);
-  const wasMoving = useRef(false);
 
-  // Trạng thái cú nhảy / chuyến bay hiện tại
-  const initPos = new THREE.Vector3(
-    targetPos[0] + offset[0],
-    targetPos[1],
-    targetPos[2] + offset[1],
-  );
-  const currentPos = useRef(initPos);
-  const hopFrom = useRef(initPos.clone());
-  const hopTo = useRef(initPos.clone());
-  const hopT = useRef(-1);
-  const hopDur = useRef(HOP_BASE_S);
-  const hopHeight = useRef(HOP_BASE_HEIGHT);
-  /** Cú di chuyển hiện tại là chuyến bay (đi Du lịch) */
-  const isFlight = useRef(false);
-  const landT = useRef(-1);
-  const yaw = useRef(0);
-  const facing = useRef(0);
-  /** 0 = nhân vật đứng, 1 = đang ở trong máy bay */
-  const planeMix = useRef(0);
-  const tmp = useRef(new THREE.Vector3());
+  const shadowTex = useMemo(() => softShadowTexture(), []);
+
+  // Toàn bộ trạng thái hoạt ảnh nằm trong một đối tượng (không gây render lại)
+  const S = useRef<{
+    pos: THREE.Vector3;
+    lastTile: number;
+    queue: number[];
+    hop: Hop | null;
+    run: number;
+    runActive: boolean;
+    idx: number;
+    lastStartT: number;
+    prevOwn: number;
+    kObs: number;
+    sinceLand: number;
+    yaw: number;
+    facing: number;
+    planeMix: number;
+    puffT: number;
+    ringT: number;
+    ready: boolean;
+    tmp: THREE.Vector3;
+    off: THREE.Vector3;
+  }>({
+    pos: new THREE.Vector3(),
+    lastTile: tileId,
+    queue: [],
+    hop: null,
+    run: 0,
+    runActive: false,
+    idx: 0,
+    lastStartT: -1,
+    prevOwn: T_STEP,
+    kObs: 1,
+    sinceLand: 99,
+    yaw: 0,
+    facing: 0,
+    planeMix: 0,
+    puffT: -1,
+    ringT: -1,
+    ready: false,
+    tmp: new THREE.Vector3(),
+    off: new THREE.Vector3(),
+  });
+
+  // Giá trị mới nhất cho vòng lặp (tránh dựng lại closure)
+  const latest = useRef({ tileId, state, slot, getTilePos });
+  useEffect(() => {
+    latest.current = { tileId, state, slot, getTilePos };
+  });
 
   useFrame(({ clock }, delta) => {
     const g = groupRef.current;
     if (!g) return;
+    const s = S.current;
+    const { tileId: tile, state: st, slot: sl, getTilePos: tilePosOf } = latest.current;
     const dt = Math.min(delta, 0.05);
-    const target = tmp.current.set(
-      targetPos[0] + offset[0],
-      targetPos[1],
-      targetPos[2] + offset[1],
-    );
-    const flying = state === "flying";
+    const now = clock.elapsedTime;
+    const flying = st === "flying";
+    const stepping = isStepping(st);
+    const fx = moveFxEnabled();
+    const reduced = prefersReducedMotion();
 
-    // Có ô đích mới -> nhảy sang ô kế, hoặc bay thẳng tới đích khi đi Du lịch
-    if (hopTo.current.distanceToSquared(target) > 1e-6) {
-      hopFrom.current.copy(currentPos.current);
-      hopTo.current.copy(target);
-      const dist = hopFrom.current.distanceTo(hopTo.current);
-      isFlight.current = flying;
-      if (flying) {
-        hopDur.current = FLIGHT_S;
-        hopHeight.current = Math.min(
-          FLIGHT_MAX_HEIGHT,
-          FLIGHT_BASE_HEIGHT + dist * 0.12,
-        );
-      } else {
-        hopDur.current = Math.min(HOP_MAX_S, HOP_BASE_S + dist * 0.02);
-        hopHeight.current = Math.min(
-          HOP_MAX_HEIGHT,
-          HOP_BASE_HEIGHT + dist * 0.08,
-        );
-      }
-      const dx = hopTo.current.x - hopFrom.current.x;
-      const dz = hopTo.current.z - hopFrom.current.z;
-      if (dx * dx + dz * dz > 1e-4) facing.current = Math.atan2(dx, dz);
-      hopT.current = 0;
-      wasMoving.current = true;
+    /** Vị trí đứng (thế giới) trên ô `id` với khe `slot` */
+    const standAt = (id: number, slotXY: [number, number], out: THREE.Vector3) => {
+      const p = tilePosOf(id);
+      return standOffset(slotXY, s.off).add(out.set(p[0], p[1], p[2]));
+    };
+
+    if (!s.ready) {
+      s.ready = true;
+      standAt(tile, sl, s.pos);
     }
 
+    // ---- Phát hiện ô mới ----
+    if (tile !== s.lastTile) {
+      s.lastTile = tile;
+      if (flying) {
+        startHop("flight", tile, false);
+      } else if (stepping || s.hop || s.queue.length) {
+        s.queue.push(tile);
+      } else {
+        startHop("jump", tile, false); // dịch chuyển / bị bắt vào tù: cung dài, không đi qua các ô giữa
+      }
+    }
+
+    if (stepping && !s.runActive) {
+      s.runActive = true;
+      s.run++;
+      s.idx = 0;
+      s.lastStartT = -1;
+      s.kObs = 1;
+    }
+    if (!s.hop && s.queue.length) startHop("step", s.queue.shift() as number, false);
+    if (!stepping && !s.hop && !s.queue.length) {
+      s.runActive = false;
+      clearMoveHint(playerId);
+    }
+
+    function startHop(kind: HopKind, id: number, _unused: boolean) {
+      void _unused;
+      const from = s.pos.clone();
+      const last = kind === "step" && st === "landing" && s.queue.length === 0;
+      let dur: number;
+      let H: number;
+      if (kind === "flight") {
+        dur = FLIGHT_S;
+        const dist = from.distanceTo(standAt(id, sl, s.tmp));
+        H = Math.min(FLIGHT_MAX_HEIGHT, FLIGHT_BASE_HEIGHT + dist * 0.12);
+      } else if (kind === "jump") {
+        const dist = from.distanceTo(standAt(id, sl, s.tmp));
+        dur = Math.min(HOP_MAX_S, HOP_BASE_S + dist * 0.02);
+        H = Math.min(HOP_MAX_HEIGHT, HOP_BASE_HEIGHT + dist * 0.08);
+      } else {
+        const idx = s.idx++;
+        const [jt, jh] = jitter(playerId, s.run, idx);
+        const own = T_STEP * (idx === 0 ? 1.15 : 1) * (last ? 1.25 : 1) * (1 + 0.04 * jt);
+        const hint = getMoveHint(playerId)?.[idx];
+        if (hint === undefined && s.lastStartT >= 0) {
+          // Máy khách: bám nhịp thực tế của chủ phòng (có thể nén do giới hạn 3.2 s)
+          s.kObs = Math.min(1, Math.max(0.5, (now - s.lastStartT) / s.prevOwn));
+        }
+        dur = hint ?? own * s.kObs;
+        dur /= 1 + 0.5 * s.queue.length; // đang bị trễ -> bắt kịp
+        s.lastStartT = now;
+        s.prevOwn = own;
+        H = HOP_BASE_HEIGHT * (last ? 1.1 : 1) * (1 + 0.05 * jh);
+        if (reduced) {
+          dur = Math.min(dur, 0.12);
+          H = 0;
+        }
+      }
+      const to = new THREE.Vector3();
+      s.hop = { kind, tile: id, from, to, t: 0, dur, H, idx: s.idx - 1, last, fired: false };
+      refreshTarget(s.hop);
+      const dx = to.x - from.x;
+      const dz = to.z - from.z;
+      if (dx * dx + dz * dz > 1e-4) s.facing = Math.atan2(dx, dz);
+    }
+
+    /** Điểm đáp của bước (theo khe hiện tại — các quân khác có thể đã đổi khe) */
+    function refreshTarget(h: Hop) {
+      standAt(h.tile, sl, h.to);
+    }
+
+    // ---- Tiến trình nhảy ----
     let lift = 0;
     let sy = 1;
     let pitch = 0;
-    if (hopT.current >= 0) {
-      hopT.current = Math.min(1, hopT.current + dt / hopDur.current);
-      const p = hopT.current;
-      const e = easeInOut(p);
-      currentPos.current.lerpVectors(hopFrom.current, hopTo.current, e);
-      // Đường vòng cung (cú nhảy thấp / chuyến bay cao)
-      lift = 4 * hopHeight.current * p * (1 - p);
-      if (isFlight.current) {
-        // Mũi máy bay ngóc lên khi cất cánh, chúc xuống khi hạ cánh
-        const dist = hopFrom.current.distanceTo(hopTo.current);
-        const climb = 4 * hopHeight.current * (1 - 2 * p);
-        const ground = dist * 4 * Math.min(p, 1 - p) + 0.5;
-        pitch = THREE.MathUtils.clamp(-Math.atan2(climb, ground), -0.6, 0.6);
+    let sink = 0;
+    const hop = s.hop;
+    s.sinceLand += dt;
+    if (hop) {
+      hop.t += dt;
+      refreshTarget(hop);
+      if (hop.kind === "step") {
+        if (reduced) {
+          const p = Math.min(1, hop.t / hop.dur);
+          s.pos.lerpVectors(hop.from, hop.to, easeInOut(p));
+          if (p >= 0.9 && !hop.fired) fireLand(hop);
+        } else {
+          const pose = hopPose(hop.t, hop.dur, hop.H, PAWN_SCALE);
+          s.pos.lerpVectors(hop.from, hop.to, pose.u);
+          lift = pose.lift;
+          pitch = pose.pitch;
+          sink = pose.sink;
+          sy = pose.landed ? 1 : pose.sy;
+          if (pose.landed && !hop.fired) fireLand(hop);
+        }
       } else {
-        sy = 1 + 0.14 * Math.sin(Math.PI * p);
+        const p = Math.min(1, hop.t / hop.dur);
+        s.pos.lerpVectors(hop.from, hop.to, easeInOut(p));
+        lift = 4 * hop.H * p * (1 - p);
+        if (hop.kind === "flight") {
+          const dist = hop.from.distanceTo(hop.to);
+          const climb = 4 * hop.H * (1 - 2 * p);
+          const ground = dist * 4 * Math.min(p, 1 - p) + 0.5;
+          pitch = THREE.MathUtils.clamp(-Math.atan2(climb, ground), -0.6, 0.6);
+        } else {
+          sy = 1 + 0.14 * Math.sin(Math.PI * p);
+        }
+        if (p >= 1 && !hop.fired) {
+          hop.fired = true;
+          if (hop.kind === "jump") fireLand(hop);
+          else s.sinceLand = 0;
+        }
       }
-      if (p >= 1) {
-        hopT.current = -1;
-        landT.current = 0;
-        if (!isFlight.current) stepRingT.current = 0;
+      if (hop.t >= hop.dur) {
+        s.pos.copy(hop.to);
+        s.hop = null;
+        if (hop.last) s.puffT = 0;
+        if (s.queue.length) startHop("step", s.queue.shift() as number, false);
       }
+    } else {
+      // Đứng yên: trượt mượt (lò xo ~180 ms) sang khe mới khi có quân khác tới / đi
+      standAt(tile, sl, s.tmp);
+      s.pos.lerp(s.tmp, 1 - Math.exp(-dt * 12));
+      if (s.pos.distanceToSquared(s.tmp) < 1e-8) s.pos.copy(s.tmp);
     }
 
-    // Nén người khi chạm ô
-    if (landT.current >= 0) {
-      landT.current += dt;
-      const q = Math.min(1, landT.current / LAND_SQUASH_S);
-      sy = 1 - 0.2 * Math.sin(Math.PI * q);
-      if (q >= 1) landT.current = -1;
+    function fireLand(h: Hop) {
+      h.fired = true;
+      s.sinceLand = 0;
+      const strong = h.last;
+      if (fx && h.kind !== "flight") {
+        tileFx.land(h.tile, now, strong);
+        emitDust(h.to.x, h.to.y, h.to.z, PAWN_SCALE * 0.5, strong ? 5 : 4);
+        s.ringT = 0;
+      }
+      if (h.kind === "step") playStepLand({ last: h.last, playerId, step: h.idx });
     }
 
-    // Đáp xuống ô cuối cùng -> phụt bụi lớn
-    if (
-      wasMoving.current &&
-      hopT.current < 0 &&
-      state !== "moving" &&
-      !flying
-    ) {
-      wasMoving.current = false;
-      puffT.current = 0;
-    }
+    // Lò xo sau chạm đất (chồng lên chuẩn bị của bước kế)
+    if (!reduced) sy *= landSpring(s.sinceLand);
 
-    g.position.set(
-      currentPos.current.x,
-      currentPos.current.y + lift,
-      currentPos.current.z,
-    );
+    g.position.set(s.pos.x, s.pos.y + lift, s.pos.z);
 
     // Chuyển đổi nhân vật <-> máy bay (thu nhỏ / phóng to mượt)
-    const wantPlane = flying || (isFlight.current && hopT.current >= 0);
-    planeMix.current +=
-      ((wantPlane ? 1 : 0) - planeMix.current) * Math.min(1, dt * 9);
-    const mix = planeMix.current;
+    const wantPlane = flying || (hop?.kind === "flight");
+    s.planeMix += ((wantPlane ? 1 : 0) - s.planeMix) * Math.min(1, dt * 9);
+    const mix = s.planeMix;
 
     if (bodyRef.current) {
-      const sxz = 1 / Math.sqrt(sy); // giữ thể tích khi co giãn
+      const sxz = volumeXZ(sy); // giữ thể tích khi co giãn
       const k = 1 - mix;
       bodyRef.current.visible = k > 0.02;
       bodyRef.current.scale.set(sxz * k, sy * k, sxz * k);
-      // Quay mặt theo hướng đi; đứng yên thì quay lại nhìn camera
-      const wantYaw = state === "moving" || flying ? facing.current : 0;
-      let diff = wantYaw - yaw.current;
+      bodyRef.current.position.y = -sink; // hạ trọng tâm, chân vẫn dính mặt ô
+      // Quay mặt theo hướng đi (xong trước khi nhảy); đứng yên thì quay lại nhìn camera
+      const wantYaw = stepping || flying || hop ? s.facing : 0;
+      let diff = wantYaw - s.yaw;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      yaw.current += diff * Math.min(1, dt * 10);
-      bodyRef.current.rotation.y = yaw.current;
+      s.yaw += diff * Math.min(1, dt * 16);
+      bodyRef.current.rotation.order = "YXZ";
+      bodyRef.current.rotation.set(pitch, s.yaw, 0);
     }
 
     if (planeRef.current) {
@@ -304,35 +457,41 @@ function SmoothPawn({
       pl.visible = mix > 0.02;
       pl.scale.setScalar(mix * PLANE_SCALE);
       pl.rotation.set(0, 0, 0);
-      pl.rotation.y = facing.current;
-      // Đang bay: nghiêng mũi theo quỹ đạo + chao cánh nhẹ; chờ cất cánh: lơ lửng
+      pl.rotation.y = s.facing;
       const bob = Math.sin(clock.elapsedTime * 5) * 0.06;
-      pl.position.y = 0.6 + (hopT.current >= 0 ? 0 : bob);
+      pl.position.y = 0.6 + (hop ? 0 : bob);
       pl.rotateX(pitch);
       pl.rotateZ(Math.sin(clock.elapsedTime * 3) * 0.12);
-      // Cánh quạt quay
       const prop = pl.getObjectByName("propeller");
       if (prop) prop.rotation.z += dt * 40;
     }
 
-    // Đĩa màu người chơi nhấp nháy nhẹ (nằm trên ô, như bóng máy bay khi bay)
+    // Bóng tiếp xúc: nằm trên mặt ô, nhỏ lại 25% & mờ đi 40% khi lên cao
+    if (shadowRef.current) {
+      const h = hop ? Math.min(1, lift / Math.max(0.01, hop.kind === "step" ? hop.H : 1.5)) : 0;
+      shadowRef.current.position.y = 0.03 - lift;
+      shadowRef.current.scale.setScalar(1 - 0.25 * h);
+      (shadowRef.current.material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - 0.4 * h);
+    }
+
+    // Đĩa màu người chơi nằm trên ô (như bóng máy bay khi bay)
     if (discRef.current) {
       discRef.current.position.y = 0.035 - lift;
       const m = discRef.current.material as THREE.MeshBasicMaterial;
       m.opacity = 0.45 + Math.sin(clock.elapsedTime * 3) * 0.12;
     }
 
-    // Vòng sáng mỗi bước
+    // Vòng sáng mỗi lần chạm đất
     if (stepRingRef.current) {
       const m = stepRingRef.current.material as THREE.MeshBasicMaterial;
-      if (stepRingT.current >= 0) {
-        stepRingT.current += dt;
-        const p = stepRingT.current / 0.35;
+      if (s.ringT >= 0) {
+        s.ringT += dt;
+        const p = s.ringT / 0.35;
         stepRingRef.current.visible = p < 1;
         stepRingRef.current.position.y = 0.05 - lift;
         stepRingRef.current.scale.setScalar(0.5 + p * 0.9);
         m.opacity = 0.75 * (1 - p);
-        if (p >= 1) stepRingT.current = -1;
+        if (p >= 1) s.ringT = -1;
       } else {
         stepRingRef.current.visible = false;
       }
@@ -341,21 +500,37 @@ function SmoothPawn({
     // Vòng bụi khi đáp ô cuối
     if (puffRef.current) {
       const m = puffRef.current.material as THREE.MeshBasicMaterial;
-      if (puffT.current >= 0) {
-        puffT.current += dt;
-        const p = puffT.current / 0.45;
+      if (s.puffT >= 0 && fx) {
+        s.puffT += dt;
+        const p = s.puffT / 0.45;
         puffRef.current.visible = p < 1;
         puffRef.current.scale.setScalar(0.6 + p * 1.2);
         m.opacity = 0.6 * (1 - p);
-        if (p >= 1) puffT.current = -1;
+        if (p >= 1) s.puffT = -1;
       } else {
         puffRef.current.visible = false;
+        if (!fx) s.puffT = -1;
       }
     }
   });
 
   return (
     <group ref={groupRef}>
+      {/* Bóng tiếp xúc mềm dưới chân */}
+      <mesh
+        ref={shadowRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.03, 0]}
+        renderOrder={1}
+      >
+        <planeGeometry args={[1.5, 1.5]} />
+        <meshBasicMaterial
+          map={shadowTex}
+          transparent
+          opacity={0.5}
+          depthWrite={false}
+        />
+      </mesh>
       {/* Đĩa màu người chơi dưới chân -> dễ nhận ra quân của ai */}
       <mesh
         ref={discRef}
@@ -370,7 +545,7 @@ function SmoothPawn({
           depthWrite={false}
         />
       </mesh>
-      {/* Vòng sáng màu người chơi loé lên ở mỗi ô vừa nhảy qua */}
+      {/* Vòng sáng màu người chơi loé lên ở mỗi ô vừa chạm */}
       <mesh
         ref={stepRingRef}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -410,6 +585,33 @@ function SmoothPawn({
       </group>
     </group>
   );
+}
+
+/** Texture bóng mềm (gradient tròn) — tạo một lần */
+let _shadowTex: THREE.CanvasTexture | null = null;
+function softShadowTexture() {
+  if (_shadowTex) return _shadowTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const ctx = c.getContext("2d");
+  if (ctx) {
+    const gr = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+    gr.addColorStop(0, "rgba(0,0,0,0.85)");
+    gr.addColorStop(0.55, "rgba(0,0,0,0.35)");
+    gr.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, 64, 64);
+  }
+  _shadowTex = new THREE.CanvasTexture(c);
+  return _shadowTex;
+}
+
+/** Cập nhật hiệu ứng lún ô mỗi khung hình (một vòng lặp duy nhất) */
+function TileFxDriver() {
+  useFrame(({ clock }) => {
+    tileFx.step(clock.elapsedTime);
+  });
+  return null;
 }
 
 /** Máy bay đồ chơi (mũi hướng +Z), cánh & đuôi theo màu người chơi */
@@ -596,14 +798,6 @@ function TileEventEffects({ tile }: { tile: Tile3DData }) {
   );
 }
 
-// Quân cờ chibi to hơn -> giãn khoảng cách khi nhiều quân đứng chung 1 ô
-const PAWN_OFFSETS: [number, number][] = [
-  [-0.55, -0.5],
-  [0.55, -0.5],
-  [-0.55, 0.48],
-  [0.55, 0.48],
-];
-
 interface Monopoly3DSceneProps {
   players: Player3D[];
   tiles: Tile3DData[];
@@ -713,12 +907,42 @@ function Monopoly3DScene({
   focusPlayerId,
 }: Monopoly3DSceneProps) {
   const isCompact = useIsCompact();
+  // Vị trí ô theo id (cho hoạt ảnh nhảy từng ô)
+  const getTilePos = useCallback(
+    (id: number): [number, number, number] =>
+      tiles[id]?.position ?? [0, 0.4, 0],
+    [tiles],
+  );
+  // Khe đứng: nhiều quân cùng ô xếp theo bảng khe cố định (không chồng nhau). Quân đang đi
+  // ngang qua ô có quân khác thì lệch về phía camera để nhảy QUA chứ không đáp lên khe đó.
+  const pawnSlots = useMemo(() => {
+    const stationary = new Map<number, number[]>();
+    const alive = (players ?? []).filter((p) => !p.isBankrupt);
+    for (const p of alive) {
+      const st = pawnStates[p.id];
+      if (st === "moving") continue;
+      const arr = stationary.get(p.tileIndex) ?? [];
+      arr.push(p.id);
+      stationary.set(p.tileIndex, arr);
+    }
+    const out = new Map<number, [number, number]>();
+    for (const p of alive) {
+      const group = stationary.get(p.tileIndex) ?? [];
+      if (pawnStates[p.id] === "moving") {
+        out.set(p.id, group.length ? [0, -0.42] : [0, 0]);
+        continue;
+      }
+      const slots = SLOTS[Math.min(4, Math.max(1, group.length))];
+      out.set(p.id, slots[Math.max(0, group.indexOf(p.id))] ?? [0, 0]);
+    }
+    return out;
+  }, [players, pawnStates]);
   // Điểm camera cần giữ trong khung: ô quân cờ đang chơi (ưu tiên quân đang di chuyển)
   // và các ô phía trước (6 ô) -> lấy điểm giữa
   const focus = useMemo<[number, number] | null>(() => {
     const mover = players?.find((p) => {
       const st = pawnStates[p.id];
-      return st === "moving" || st === "flying";
+      return st === "moving" || st === "landing" || st === "flying";
     });
     const who = mover ?? players?.find((p) => p.id === focusPlayerId);
     if (!who || !tiles.length) return null;
@@ -766,6 +990,8 @@ function Monopoly3DScene({
         shadow-bias={-0.0005}
       />
 
+      <TileFxDriver />
+      <DustPool />
       <CameraRig mode={fitMode} focus={focus} />
 
 
@@ -815,6 +1041,7 @@ function Monopoly3DScene({
           <group
             key={tile.id}
             position={tile.position}
+            ref={(g) => tileFx.register(tile.id, g, tile.position[1])}
             onClick={(e) => {
               // Bỏ qua khi người chơi đang kéo / pinch camera
               if (e.delta > 6 || isTravelSelecting) return;
@@ -921,19 +1148,18 @@ function Monopoly3DScene({
       {/* Quân cờ người chơi */}
       {players
         ?.filter((player) => !player.isBankrupt)
-        ?.map((p, idx) => {
-          const tilePos = tiles[p.tileIndex]?.position || [9, 0.1, 9];
-          return (
-            <SmoothPawn
-              key={p.id}
-              type={p.type}
-              state={pawnStates[p.id] || "idle"}
-              targetPos={tilePos}
-              offset={PAWN_OFFSETS[idx]}
-              color={p.color}
-            />
-          );
-        })}
+        ?.map((p) => (
+          <SmoothPawn
+            key={p.id}
+            playerId={p.id}
+            tileId={p.tileIndex}
+            getTilePos={getTilePos}
+            type={p.type}
+            state={pawnStates[p.id] || "idle"}
+            slot={pawnSlots.get(p.id) ?? [0, 0]}
+            color={p.color}
+          />
+        ))}
     </Canvas>
   );
 }

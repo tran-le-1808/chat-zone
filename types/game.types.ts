@@ -48,6 +48,12 @@ export interface TileData {
   house3Price: number;
   villaPrice: number;
   rent: number;
+  /**
+   * Cơ sở tính tiền thuê theo cấp [đất, 1 nhà, 2 nhà, 3 nhà, khách sạn].
+   * Tách khỏi giá mua nhà để giảm giá nhà không làm đổi tiền thuê.
+   * (Ván lưu từ trước không có trường này -> tính theo giá mua như cũ.)
+   */
+  rentBasis?: number[];
   ownerId?: number;
   ownerColor?: string;
   houses: number;

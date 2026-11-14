@@ -262,6 +262,14 @@ export function generateInitialBoard(economyScale = 1): TileData[] {
       villaPrice: price(E.villaFactor),
 
       rent: price(E.rentRate),
+      // Tiền thuê tính theo mức đầu tư CŨ (không giảm theo giá nhà)
+      rentBasis: [
+        base,
+        price(E.rentBasis.house1),
+        price(E.rentBasis.house2),
+        price(E.rentBasis.house3),
+        price(E.rentBasis.house3) + price(E.rentBasis.villa),
+      ],
 
       houses: 0,
       hasVilla: false,

@@ -27,6 +27,9 @@ import { socket } from "@/lib/socket";
 import { monoEmit } from "@/lib/monopolySocket";
 import { toast } from "sonner";
 import { generateInitialBoard } from "../_components/boardConfig";
+import { buildStepDurations } from "../_components/board/anim/stepTimeline";
+import { getMoveSpeed } from "../_components/board/anim/animSettings";
+import { clearMoveHint, setMoveHint } from "../_components/board/anim/moveBus";
 import { ECONOMY_BASE, Economy, makeEconomy, roundMoney } from "./economy";
 import {
   CHANCE_CARDS,
@@ -206,10 +209,10 @@ export const rpsCompare = (a: RpsChoice, b: RpsChoice) =>
       : -1;
 
 export const BANKRUPT_NOTICE_MS = 4000;
-/** Thời gian nhảy qua mỗi ô khi đi theo xúc xắc */
-const PAWN_STEP_MS = 200;
+/** Chờ trước bước nhảy đầu (quân quay đầu theo hướng đi) */
+const PAWN_TURN_MS = 180;
 /** Chờ cú nhảy cuối đáp xong rồi mới xử lý ô */
-const PAWN_LAND_MS = 380;
+const PAWN_LAND_MS = 250;
 /** Du lịch: bay nhanh hơn đi bộ (có thể vượt nhiều ô) */
 /** Đi Du lịch: thời gian lên máy bay & thời gian bay (khớp FLIGHT_S trong Board3D) */
 const FLIGHT_BOARD_MS = 450;
@@ -311,6 +314,8 @@ export function GameProvider({
   const [board, setBoard] = useState<TileData[]>(
     () => snap?.board ?? generateInitialBoard(economy.scale),
   );
+  /** Số thứ tự lượt đi (hạt giống cho nhịp nhảy) */
+  const moveSeqRef = useRef(0);
   // Ô Nhà Tù lấy theo dữ liệu bàn cờ (32 ô: ô 8) — không viết cứng số ô
   const jailIndex = useMemo(
     () => Math.max(0, board.findIndex((t) => t.type === "JAIL")),
@@ -425,11 +430,17 @@ export function GameProvider({
     // Tiền thuê LUÔN lớn hơn số tiền đã bỏ ra để mua mức hiện tại:
     // tiền thuê = giá trị đầu tư (đất / đất + n nhà / khách sạn) x rentRate (> 1).
     // Tính ở mức chuẩn $10.000 rồi nhân hệ số -> ván $20.000 gấp đôi chính xác.
-    const invested = tile.hasVilla
-      ? tile.house3Price + tile.villaPrice
-      : ([tile.landPrice, tile.house1Price, tile.house2Price, tile.house3Price][
-          tile.houses
-        ] ?? tile.landPrice);
+    // Dùng cơ sở tiền thuê riêng (giữ nguyên khi giá mua nhà giảm); ván lưu cũ thì theo giá mua.
+    const invested = tile.rentBasis
+      ? (tile.rentBasis[tile.hasVilla ? 4 : tile.houses] ?? tile.landPrice)
+      : tile.hasVilla
+        ? tile.house3Price + tile.villaPrice
+        : ([
+            tile.landPrice,
+            tile.house1Price,
+            tile.house2Price,
+            tile.house3Price,
+          ][tile.houses] ?? tile.landPrice);
     let baseRent = roundMoney(
       roundMoney((invested / economy.scale) * ECONOMY_BASE.rentRate) *
         economy.scale,
@@ -646,9 +657,19 @@ export function GameProvider({
     let currentPos = players.find((p) => p.id === playerId)?.tileIndex ?? 0;
     setPawnStates((prev) => ({ ...prev, [playerId]: "moving" }));
 
-    for (let i = 1; i <= steps; i++) {
-      // Mỗi ô 1 cú nhảy (hiệu ứng ở Board3D) -> chậm vừa phải để kịp nhìn
-      await sleep(PAWN_STEP_MS);
+    // Nhịp đi: bước đầu chậm hơn, bước cuối chậm hơn & có đà, tổng <= 3.2 s (xem stepTimeline.ts).
+    // Hoạt ảnh (SmoothPawn) đọc cùng bảng thời lượng này nên nhịp logic và hình ảnh khớp nhau.
+    const speed = getMoveSpeed();
+    const durs = buildStepDurations(steps, playerId, ++moveSeqRef.current, speed);
+    setMoveHint(playerId, durs);
+    // Chờ xúc xắc dừng hẳn + quân quay đầu theo hướng đi rồi mới nhảy
+    await sleep(speed === "instant" ? 0 : PAWN_TURN_MS);
+
+    for (let i = 0; i < steps; i++) {
+      // Bước cuối: báo "landing" trước để hoạt ảnh nhảy cao hơn / chạm đất mạnh hơn
+      if (i === steps - 1) {
+        setPawnStates((prev) => ({ ...prev, [playerId]: "landing" }));
+      }
       currentPos = (currentPos + 1) % board.length;
 
       if (currentPos === 0) {
@@ -664,9 +685,13 @@ export function GameProvider({
           p.id === playerId ? { ...p, tileIndex: currentPos } : p,
         ),
       );
+      // Mỗi ô 1 cú nhảy: chờ hết thời lượng bước này rồi mới sang bước kế
+      await sleep(durs[i] * 1000);
     }
 
+    // Chờ cú đáp cuối hồi phục xong rồi mới hiện cửa sổ mua đất / trả tiền / lá bài
     await sleep(PAWN_LAND_MS);
+    clearMoveHint(playerId);
     setPawnStates((prev) => ({ ...prev, [playerId]: "idle" }));
     resolveTileAction(playerId, currentPos, isDouble);
   };
@@ -1348,7 +1373,7 @@ export function GameProvider({
     if (rpsGame || xocGame) return "none";
     if (winnerId !== null || bankruptNotice || currPlayer.isBankrupt)
       return "none";
-    if (pawnStates[currPlayer.id] === "moving") return "none";
+    if (pawnStates[currPlayer.id] === "moving" || pawnStates[currPlayer.id] === "landing") return "none";
     if (showSellModal) return "sell";
     if (pendingFinish || taxNotification) return "none";
     if (showBuyModal) return "buy";

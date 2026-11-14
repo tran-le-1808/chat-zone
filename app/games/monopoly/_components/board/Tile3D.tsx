@@ -57,19 +57,15 @@ export interface TileLayout {
 }
 
 /**
- * Vị trí đặt nhà / cờ trên ô.
- * Dãy phía xa (cạnh Bắc) có dải màu ở phía gần camera -> nhà đứng đó sẽ che chữ,
- * nên đặt nhà ở mép SAU của ô (phía xa camera).
+ * Vị trí đặt nhà / cờ trên ô = giữa dải màu. Dải màu luôn nằm ở mép SAU của ô
+ * (phía trên màn hình, xem innerDirection trong theme.ts) nên nhà đứng ngay trên dải màu
+ * và không che tên / giá ở phần thân ô phía dưới.
  */
 export function getBuildingAnchor(tile: Tile3DData): {
   position: [number, number, number];
   alongZ: boolean;
 } {
   const layout = getTileLayout(tile);
-  const side = Math.floor(tile.id / 8);
-  if (side === 2 && !layout.isCorner) {
-    return { position: [0, TILE_TOP, -layout.d / 2 + 0.48], alongZ: false };
-  }
   return {
     position: [layout.band[0], BAND_TOP, layout.band[1]],
     alongZ: layout.band[0] !== 0,
