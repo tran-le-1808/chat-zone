@@ -1,13 +1,13 @@
 "use client";
 
-import Image from "next/image";
 import { useAppSelector } from "@/redux/hooks";
 import type { AIMessage } from "@/redux/features/aiSlice";
 import type { Attachment, Message } from "@/types/chat";
 import UserAvatar from "@/components/ui/UserAvatar";
 import DongSonDrum from "@/components/ui/DongSonDrum";
-import { Bot, Download, FileText, ImageIcon, Users, X } from "lucide-react";
+import { Bot, Download, FileText, Users, X } from "lucide-react";
 import { mediaUrl } from "@/lib/mediaUrl";
+import SharedImages from "./SharedImages";
 
 const formatSize = (bytes?: number) => {
   if (!bytes) return "";
@@ -39,9 +39,6 @@ export default function RightSidebar({
   const attachments: Attachment[] = (messages as Message[]).flatMap(
     (m) => m.attachments ?? [],
   );
-  const images = attachments
-    .filter((a) => a.type.startsWith("image"))
-    .reverse();
   const files = attachments
     .filter((a) => !a.type.startsWith("image") && !a.type.startsWith("video"))
     .reverse();
@@ -121,42 +118,13 @@ export default function RightSidebar({
         </section>
       )}
 
-      {/* Ảnh đã chia sẻ */}
-      {!isAI && (
-        <section className="mt-6">
-          <h4 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-400">
-            <ImageIcon className="h-4 w-4 text-[#ffd166]" />
-            Ảnh đã chia sẻ
-            <span className="ml-auto text-xs font-semibold normal-case tracking-normal text-slate-500">
-              {images.length}
-            </span>
-          </h4>
-          {images.length ? (
-            <div className="grid grid-cols-3 gap-2">
-              {images.slice(0, 9).map((img, i) => (
-                <a
-                  key={`${img.url}-${i}`}
-                  href={mediaUrl(img.url)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="relative aspect-square overflow-hidden rounded-xl ring-1 ring-white/10 transition hover:opacity-80"
-                >
-                  <Image
-                    src={mediaUrl(img.url)}
-                    alt={img.name || "Ảnh"}
-                    fill
-                    unoptimized
-                    className="object-cover"
-                  />
-                </a>
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-2xl border border-dashed border-white/10 py-5 text-center text-xs text-slate-500">
-              Chưa có ảnh nào
-            </p>
-          )}
-        </section>
+      {/* Ảnh đã chia sẻ (lấy từ máy chủ, 5 ảnh mỗi lần, bấm để xem trong modal) */}
+      {!isAI && selectedConversation?._id && (
+        <SharedImages
+          key={selectedConversation._id}
+          conversationId={selectedConversation._id}
+          messages={messages as Message[]}
+        />
       )}
 
       {/* Tệp */}

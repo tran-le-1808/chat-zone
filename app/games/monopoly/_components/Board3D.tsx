@@ -30,7 +30,7 @@ import CityCenter from "./board/CityCenter";
 import CameraRig from "./board/CameraRig";
 import DustPool, { emitDust } from "./board/anim/DustPool";
 import { tileFx } from "./board/anim/tileFx";
-import { playStepLand } from "./board/anim/stepSound";
+import { playFlight, playFlightLand, playStepLand } from "./board/anim/stepSound";
 import { clearMoveHint, getMoveHint } from "./board/anim/moveBus";
 import { moveFxEnabled, prefersReducedMotion } from "./board/anim/animSettings";
 import {
@@ -322,6 +322,7 @@ function SmoothPawn({
       let H: number;
       if (kind === "flight") {
         dur = FLIGHT_S;
+        playFlight(FLIGHT_S);
         const dist = from.distanceTo(standAt(id, sl, s.tmp));
         H = Math.min(FLIGHT_MAX_HEIGHT, FLIGHT_BASE_HEIGHT + dist * 0.12);
       } else if (kind === "jump") {
@@ -399,7 +400,10 @@ function SmoothPawn({
         if (p >= 1 && !hop.fired) {
           hop.fired = true;
           if (hop.kind === "jump") fireLand(hop);
-          else s.sinceLand = 0;
+          else {
+            s.sinceLand = 0;
+            playFlightLand();
+          }
         }
       }
       if (hop.t >= hop.dur) {

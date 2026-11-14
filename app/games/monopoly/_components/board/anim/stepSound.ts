@@ -109,3 +109,102 @@ export function playStepLand(opts: { last?: boolean; playerId?: number; step?: n
     /* âm thanh là phụ, bỏ qua lỗi */
   }
 }
+
+// ---------------------------------------------------------------------------
+// Âm máy bay (đi Du lịch): cất cánh -> động cơ cánh quạt vo ve -> hạ cánh
+// ---------------------------------------------------------------------------
+let noiseBuf: AudioBuffer | null = null;
+function noise(ac: AudioContext) {
+  if (noiseBuf) return noiseBuf;
+  noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return noiseBuf;
+}
+
+/**
+ * Tiếng chuyến bay kéo dài `dur` giây:
+ *  - chuông "ting" báo cất cánh
+ *  - động cơ: sóng răng cưa trầm có rung (cánh quạt) lên cao khi cất cánh, hạ xuống khi hạ cánh
+ *  - gió vù: nhiễu lọc, quét tần số theo độ cao cung bay
+ *  - chuông hạ cánh êm ở cuối (do playFlightLand)
+ */
+export function playFlight(dur = 1.9) {
+  if (!stepSoundEnabled()) return;
+  try {
+    const ac = audio();
+    if (!ac) return;
+    const t = ac.currentTime + 0.01;
+    const end = t + dur;
+    const mid = t + dur * 0.5;
+
+    // Chuông cất cánh: hai nốt đi lên
+    pluck(ac, t, 784, 0.1, 0.35);
+    pluck(ac, t + 0.09, 1175, 0.08, 0.4);
+
+    // Động cơ cánh quạt
+    const eng = ac.createOscillator();
+    eng.type = "sawtooth";
+    eng.frequency.setValueAtTime(70, t);
+    eng.frequency.exponentialRampToValueAtTime(125, mid);
+    eng.frequency.exponentialRampToValueAtTime(80, end);
+    const lp = ac.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 420;
+    const trem = ac.createGain(); // cánh quạt quay: biên độ rung nhanh
+    trem.gain.value = 0.55;
+    const lfo = ac.createOscillator();
+    lfo.frequency.setValueAtTime(14, t);
+    lfo.frequency.linearRampToValueAtTime(24, mid);
+    lfo.frequency.linearRampToValueAtTime(15, end);
+    const lfoDepth = ac.createGain();
+    lfoDepth.gain.value = 0.35;
+    lfo.connect(lfoDepth).connect(trem.gain);
+    const eg = ac.createGain();
+    eg.gain.setValueAtTime(0.0001, t);
+    eg.gain.exponentialRampToValueAtTime(0.07, t + 0.25);
+    eg.gain.setValueAtTime(0.07, end - 0.35);
+    eg.gain.exponentialRampToValueAtTime(0.0001, end);
+    eng.connect(lp).connect(trem).connect(eg).connect(master as GainNode);
+    eng.start(t);
+    lfo.start(t);
+    eng.stop(end + 0.05);
+    lfo.stop(end + 0.05);
+
+    // Gió vù: nhiễu băng thông quét lên đỉnh cung rồi xuống
+    const src = ac.createBufferSource();
+    src.buffer = noise(ac);
+    src.loop = true;
+    const bp = ac.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 0.9;
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(1800, mid);
+    bp.frequency.exponentialRampToValueAtTime(600, end);
+    const wg = ac.createGain();
+    wg.gain.setValueAtTime(0.0001, t);
+    wg.gain.exponentialRampToValueAtTime(0.05, t + dur * 0.3);
+    wg.gain.exponentialRampToValueAtTime(0.0001, end);
+    src.connect(bp).connect(wg).connect(master as GainNode);
+    src.start(t);
+    src.stop(end + 0.05);
+  } catch {
+    /* âm thanh là phụ */
+  }
+}
+
+/** Hạ cánh êm: chuông xuống nhẹ + "pop" trầm */
+export function playFlightLand() {
+  if (!stepSoundEnabled()) return;
+  try {
+    const ac = audio();
+    if (!ac) return;
+    const t = ac.currentTime + 0.005;
+    pop(ac, t, 180, 0.15);
+    pluck(ac, t, 988, 0.09, 0.5);
+    pluck(ac, t + 0.1, 784, 0.09, 0.55);
+    pluck(ac, t + 0.2, 587, 0.1, 0.7);
+  } catch {
+    /* bỏ qua */
+  }
+}
