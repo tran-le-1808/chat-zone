@@ -8,7 +8,7 @@ export const BOARD_TILES_CONFIG: {
   groupCode?: string;
   basePrice?: number;
 }[] = [
-  // CẠNH 1 (Index 0 - 8): Phía Nam / Xuất Phát (9 ô)
+  // CẠNH 1 (Index 0 - 7): Phía Nam / Xuất Phát (8 ô)
   { name: "START", type: "GO", color: "#16a34a" },
   {
     name: "Lạng Sơn",
@@ -17,7 +17,6 @@ export const BOARD_TILES_CONFIG: {
     groupCode: "G1",
     basePrice: 100,
   },
-  { name: "", type: "CHANCE", color: "#ea580c" },
   {
     name: "Cao Bằng",
     type: "PROPERTY",
@@ -44,7 +43,7 @@ export const BOARD_TILES_CONFIG: {
     basePrice: 180,
   },
 
-  // CẠNH 2 (Index 9 - 17): Phía Tây (9 ô)
+  // CẠNH 2 (Index 8 - 15): Phía Tây (8 ô)
   { name: "NHÀ TÙ", type: "JAIL", color: "#334155" },
   {
     name: "Ninh Bình",
@@ -69,13 +68,6 @@ export const BOARD_TILES_CONFIG: {
     groupCode: "G4",
     basePrice: 240,
   },
-  {
-    name: "Huế",
-    type: "PROPERTY",
-    color: "#f59e0b",
-    groupCode: "G4",
-    basePrice: 260,
-  },
   { name: "", type: "FATE", color: "#6366f1" },
   {
     name: "Đà Nẵng",
@@ -85,7 +77,7 @@ export const BOARD_TILES_CONFIG: {
     basePrice: 280,
   },
 
-  // CẠNH 3 (Index 18 - 26): Phía Bắc (9 ô)
+  // CẠNH 3 (Index 16 - 23): Phía Bắc (8 ô)
   { name: "LỄ HỘI", type: "FESTIVAL", color: "#eab308" },
   {
     name: "Quy Nhơn",
@@ -94,7 +86,6 @@ export const BOARD_TILES_CONFIG: {
     groupCode: "G5",
     basePrice: 320,
   },
-  { name: "", type: "CHANCE", color: "#ea580c" },
   {
     name: "Nha Trang",
     type: "PROPERTY",
@@ -121,7 +112,7 @@ export const BOARD_TILES_CONFIG: {
     basePrice: 450,
   },
 
-  // CẠNH 4 (Index 27 - 35): Phía Đông (9 ô)
+  // CẠNH 4 (Index 24 - 31): Phía Đông (8 ô)
   { name: "DU LỊCH", type: "TRAVEL", color: "#0284c7" },
   {
     name: "Cần Thơ",
@@ -154,27 +145,27 @@ export const BOARD_TILES_CONFIG: {
     groupCode: "G8",
     basePrice: 620,
   },
-  {
-    name: "Vũng Tàu",
-    type: "PROPERTY",
-    color: "#14b8a6",
-    groupCode: "G8",
-    basePrice: 650,
-  },
 ];
 
 /**
  * Tạo bàn cờ. `economyScale` = tiền khởi điểm / 10.000 (xem _context/economy.ts):
  * ván $20.000 -> giá đất / nhà / tiền thuê gấp đôi.
  */
-export function generateInitialBoard(economyScale = 1): TileData[] {
-  const SCALE = 1.25;
+/** Độ cao mặt ô: ô thường 1.0×, ô đặc biệt thấp hơn chút (0.9×), ô góc cao hơn (1.6×) */
+const SPECIAL_FLAT: TileType[] = ["CHANCE", "FATE", "TAX", "MINIGAME", "XOCDIA"];
+export function tileY(type: TileType): number {
+  if (type === "GO" || type === "JAIL" || type === "FESTIVAL" || type === "TRAVEL")
+    return 0.56;
+  if (SPECIAL_FLAT.includes(type)) return 0.36;
+  return 0.4;
+}
 
-  const normalW = 2.0 * SCALE; // Chiều rộng ô thường (2.5)
-  const cornerW = 2.8 * SCALE; // Chiều rộng ô góc (3.5)
+export function generateInitialBoard(economyScale = 1): TileData[] {
+  const normalW = 2.7; // Chiều rộng ô thường
+  const cornerW = 4.05; // Ô góc & độ sâu ô thường (= 1.5 × rộng) -> vòng ô dày, khu giữa nhỏ lại
 
   // Bàn cờ 36 ô = 4 ô góc + 32 ô thường (mỗi cạnh 8 ô thường ở giữa)
-  const innerTotalW = 8 * normalW; // Tổng chiều dài phần ô thường
+  const innerTotalW = 7 * normalW; // = 18.9 // Tổng chiều dài phần ô thường
   const halfBoard = innerTotalW / 2 + cornerW; // Nửa chiều dài toàn bàn cờ
 
   // Tâm của ô góc
@@ -184,9 +175,9 @@ export function generateInitialBoard(economyScale = 1): TileData[] {
   const innerCornerEdge = innerTotalW / 2;
 
   return BOARD_TILES_CONFIG.map((cfg, i) => {
-    const isCorner = i % 9 === 0;
-    const side = Math.floor(i / 9);
-    const indexInSide = i % 9; // 1 -> 8 (các ô thường)
+    const isCorner = i % 8 === 0;
+    const side = Math.floor(i / 8);
+    const indexInSide = i % 8; // 1 -> 7 (các ô thường)
 
     let size: [number, number, number];
 
@@ -206,15 +197,15 @@ export function generateInitialBoard(economyScale = 1): TileData[] {
         // Góc START (Đông Nam)
         x = cornerCenter;
         z = cornerCenter;
-      } else if (i === 9) {
+      } else if (i === 8) {
         // Góc NHÀ TÙ (Tây Nam)
         x = -cornerCenter;
         z = cornerCenter;
-      } else if (i === 18) {
+      } else if (i === 16) {
         // Góc LỄ HỘI (Tây Bắc)
         x = -cornerCenter;
         z = -cornerCenter;
-      } else if (i === 27) {
+      } else if (i === 24) {
         // Góc DU LỊCH (Đông Bắc)
         x = cornerCenter;
         z = -cornerCenter;
@@ -261,7 +252,7 @@ export function generateInitialBoard(economyScale = 1): TileData[] {
       color: cfg.color,
       groupCode: cfg.groupCode,
 
-      position: [x, 0.1, z],
+      position: [x, tileY(cfg.type), z],
       size,
 
       landPrice: base,

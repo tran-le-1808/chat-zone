@@ -1,19 +1,11 @@
 "use client";
 
 import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
 /** Ô BẮT ĐẦU: mũi tên chỉ hướng đi + chồng xu vàng xoay */
 export function GoIcon3D() {
   const coinsRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    if (coinsRef.current) {
-      coinsRef.current.rotation.y = clock.elapsedTime * 1.2;
-      coinsRef.current.position.y =
-        0.1 + Math.sin(clock.elapsedTime * 2) * 0.05;
-    }
-  });
 
   return (
     <group>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
 import { RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -78,17 +77,6 @@ function QuestionMark({ color }: { color: string }) {
 export function ChanceIcon() {
   const qRef = useRef<THREE.Group>(null);
   const boxRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    if (qRef.current) {
-      qRef.current.position.y = 1.15 + Math.sin(t * 2.4) * 0.08;
-      qRef.current.rotation.y = Math.sin(t * 1.3) * 0.5;
-    }
-    if (boxRef.current) {
-      const s = 1 + Math.max(0, Math.sin(t * 2.4)) * 0.04;
-      boxRef.current.scale.set(1 / s, s, 1 / s);
-    }
-  });
   return (
     <group>
       <SoftShadow r={0.5} />
@@ -144,19 +132,6 @@ export function ChanceIcon() {
 export function FateIcon() {
   const starRef = useRef<THREE.Mesh>(null);
   const sparkRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    if (starRef.current) {
-      starRef.current.rotation.y = t * 1.5;
-      starRef.current.rotation.x = t * 0.7;
-    }
-    if (sparkRef.current) {
-      sparkRef.current.rotation.y = -t * 0.8;
-      sparkRef.current.children.forEach((c, i) => {
-        c.scale.setScalar(0.6 + Math.abs(Math.sin(t * 3 + i)) * 0.6);
-      });
-    }
-  });
   return (
     <group>
       <SoftShadow r={0.45} />
@@ -204,10 +179,6 @@ export function FateIcon() {
 // ======================================================= THUẾ: túi tiền + xu
 export function TaxIcon() {
   const sackRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    if (sackRef.current)
-      sackRef.current.rotation.z = Math.sin(clock.elapsedTime * 2) * 0.08;
-  });
   return (
     <group>
       <SoftShadow r={0.5} />
@@ -245,12 +216,6 @@ export function TaxIcon() {
 // ======================================================= LỄ HỘI: cổng đèn lồng
 export function FestivalIcon() {
   const lanternsRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    if (!lanternsRef.current) return;
-    lanternsRef.current.children.forEach((c, i) => {
-      c.rotation.z = Math.sin(clock.elapsedTime * 2 + i * 1.3) * 0.15;
-    });
-  });
   const lanternColors = ["#e8392f", "#ffb020", "#e8392f"];
   return (
     <group position={[0, 0, -0.2]}>
@@ -321,15 +286,6 @@ export function FestivalIcon() {
 export function TravelIcon() {
   const planeRef = useRef<THREE.Group>(null);
   const propRef = useRef<THREE.Mesh>(null);
-  useFrame(({ clock }, delta) => {
-    const t = clock.elapsedTime;
-    if (planeRef.current) {
-      planeRef.current.position.y = 0.95 + Math.sin(t * 2) * 0.12;
-      planeRef.current.rotation.z = Math.sin(t * 2) * 0.08;
-      planeRef.current.rotation.x = Math.sin(t * 1.3) * 0.08;
-    }
-    if (propRef.current) propRef.current.rotation.x += delta * 25;
-  });
   return (
     <group>
       <SoftShadow r={0.9} />
@@ -409,10 +365,6 @@ export function TravelIcon() {
 // ======================================================= NHÀ TÙ: nhà giam đồ chơi
 export function JailIcon() {
   const lockRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    if (lockRef.current)
-      lockRef.current.rotation.z = Math.sin(clock.elapsedTime * 2.5) * 0.12;
-  });
   const W = 2.0;
   const D = 1.6;
   const H = 1.1;
@@ -520,15 +472,6 @@ export function JailIcon() {
 // ======================================================= OẲN TÙ TÌ: búa – bao – kéo
 export function RpsIcon() {
   const groupRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    const g = groupRef.current;
-    if (!g) return;
-    const t = clock.elapsedTime;
-    g.rotation.y = Math.sin(t * 0.8) * 0.5;
-    g.children.forEach((c, i) => {
-      c.position.y = 0.55 + Math.abs(Math.sin(t * 2.6 + i * 2.1)) * 0.22;
-    });
-  });
   const ring = (i: number): [number, number, number] => {
     const a = (i / 3) * Math.PI * 2 - Math.PI / 2;
     return [Math.cos(a) * 0.42, 0.55, Math.sin(a) * 0.42];
@@ -599,14 +542,6 @@ export function RpsIcon() {
 // ======================================================= XÓC ĐĨA: đĩa + 4 đồng + bát úp hé mở
 export function XocDiaIcon() {
   const bowlRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    const b = bowlRef.current;
-    if (!b) return;
-    const t = clock.elapsedTime;
-    // Bát nhấp nhổm như đang xóc rồi hé mở
-    b.position.y = 0.55 + Math.abs(Math.sin(t * 1.6)) * 0.22;
-    b.rotation.z = -0.35 + Math.sin(t * 9) * 0.05;
-  });
   const coins = [
     [-0.16, -0.06, true],
     [0.14, -0.1, false],

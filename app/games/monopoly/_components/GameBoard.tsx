@@ -1,7 +1,10 @@
 "use client";
 
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import TileInfoCard from "./TileInfoCard";
+import { Maximize2, Minimize2 } from "lucide-react";
+import type { BoardFitMode } from "./board/cameraConfig";
 import Monopoly3DScene from "./Board3D";
 import DiceRoller3D from "./DiceRoller3D";
 import { BuyModal, JailModal } from "./GameModals";
@@ -77,6 +80,9 @@ export default function GameBoard() {
     (tileId: number) => void travelRef.current(tileId),
     [],
   );
+  const [fitMode, setFitMode] = useState<BoardFitMode>("fillWidth");
+  const [infoTileId, setInfoTileId] = useState<number | null>(null);
+  const infoTile = infoTileId !== null ? board[infoTileId] : undefined;
   const isTravelSelecting =
     isMyTurn && currPlayer.canTeleport && !currPlayer.inJail;
 
@@ -98,7 +104,7 @@ export default function GameBoard() {
   };
 
   return (
-    <div className="relative h-[100dvh] w-screen overflow-hidden bg-[#0c0d14] text-white select-none">
+    <div className="relative h-[100dvh] w-[100dvw] overflow-hidden bg-[#0c0d14] text-white select-none">
       <div className="absolute inset-0 z-0">
         <Monopoly3DScene
           players={scenePlayers}
@@ -106,8 +112,32 @@ export default function GameBoard() {
           pawnStates={pawnStates}
           isTravelSelecting={isTravelSelecting}
           onTileSelect={onTileSelect}
+          onTileInfo={setInfoTileId}
+          fitMode={fitMode}
+          focusPlayerId={currPlayer.id}
         />
       </div>
+
+      {/* Chuyển giữa "Phóng đầy" (to, có thể cắt góc, tự theo quân cờ) và "Toàn cảnh" */}
+      <button
+        onClick={() =>
+          setFitMode((m) => (m === "fillWidth" ? "contain" : "fillWidth"))
+        }
+        aria-label={fitMode === "fillWidth" ? "Xem toàn cảnh" : "Phóng đầy bàn cờ"}
+        title={fitMode === "fillWidth" ? "Toàn cảnh" : "Phóng đầy"}
+        className="absolute left-[max(0.375rem,env(safe-area-inset-left))] top-1/2 z-30 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl border border-white/15 bg-black/55 text-white backdrop-blur transition hover:bg-black/75"
+      >
+        {fitMode === "fillWidth" ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+      </button>
+
+      {infoTile && (
+        <TileInfoCard
+          tile={infoTile}
+          rent={calculateTileRent(infoTile)}
+          ownerName={players.find((p) => p.id === infoTile.ownerId)?.name}
+          onClose={() => setInfoTileId(null)}
+        />
+      )}
 
       {/* Điện thoại cầm dọc -> nhắc xoay ngang (bàn cờ luôn chơi ngang) */}
       <RotateDeviceOverlay />

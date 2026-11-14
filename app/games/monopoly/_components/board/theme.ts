@@ -5,12 +5,14 @@ export const BOARD_FONT = "/fonts/Nunito-ExtraBold.ttf";
 
 export const BOARD_COLORS = {
   sky: "#9bdcff",
+  /** Nền phía sau bàn cờ (chỉ còn bàn cờ, không có đảo/biển) */
+  backdrop: "#efe4c9",
   sea: "#29b6c6",
   seaDeep: "#1a8fa3",
   sand: "#f6dfa4",
   islandGrass: "#7fd36b",
-  slab: "#26386f",
-  slabSide: "#1b2a57",
+  slab: "#8a5632",
+  slabSide: "#5e3a1f",
   trim: "#ffc93c",
   tileBase: "#fff6e2",
   tileText: "#1f2a44",
@@ -41,7 +43,7 @@ export const SPECIAL_TILES: Record<
 /** Chiều rộng dải màu nhóm đất (phía trong bàn cờ) */
 export const BAND_DEPTH = 0.85;
 /** Khe hở giữa các ô */
-export const TILE_GAP = 0.08;
+export const TILE_GAP = 0.1;
 /** Độ dày ô đất */
 export const TILE_HEIGHT = 0.18;
 
@@ -49,8 +51,30 @@ export const TILE_HEIGHT = 0.18;
  * Hướng "phía trong bàn cờ" của từng cạnh (tính theo toạ độ local của ô)
  * cạnh 0 (Nam) -> -z, cạnh 1 (Tây) -> +x, cạnh 2 (Bắc) -> +z, cạnh 3 (Đông) -> -x
  */
+export const TILES_PER_SIDE = 8;
+
+/** Dãy của ô: 0 = Bắt đầu→Nhà tù, 1 = Nhà tù→Lễ hội, 2 = Lễ hội→Du lịch, 3 = Du lịch→Bắt đầu */
+export function sideOfTile(tileId: number) {
+  return Math.floor(tileId / TILES_PER_SIDE);
+}
+
+/**
+ * Góc xoay (quanh trục đứng) của khối nhãn theo dãy, với camera nhìn từ góc BẮT ĐẦU (xoay 45°):
+ *  - dãy 0 & 2 (cạnh chéo \ trên màn hình): chữ đọc theo cạnh, đi xuống-phải
+ *  - dãy 1 & 3 (cạnh chéo /): chữ đọc theo cạnh, đi lên-phải, đáy chữ hướng xuống-phải
+ * Mọi nhãn đều đọc từ trái sang phải, đỉnh chữ ở phía trên màn hình.
+ */
+export const labelYawBySide: Record<number, number> = {
+  0: 0,
+  1: Math.PI / 2,
+  2: 0,
+  3: Math.PI / 2,
+};
+/** Ô góc: chữ nằm ngang trên màn hình */
+export const CORNER_LABEL_YAW = Math.PI / 4;
+
 export function innerDirection(tileId: number): [number, number] {
-  const side = Math.floor(tileId / 9);
+  const side = sideOfTile(tileId);
   switch (side) {
     case 0:
       return [0, -1];

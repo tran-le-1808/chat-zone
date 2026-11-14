@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import * as THREE from "three";
 import { RoundedBox, Text } from "@react-three/drei";
 import type { Tile3DData } from "../Board3D";
 import {
@@ -9,13 +10,35 @@ import {
   BOARD_FONT,
   SPECIAL_TILES,
   TILE_GAP,
-  TILE_HEIGHT,
+  CORNER_LABEL_YAW,
   innerDirection,
+  labelYawBySide,
+  sideOfTile,
 } from "./theme";
 import { BOARD_CHARACTERS, preloadBoardFont } from "./fontPreload";
 
 // Nạp trước toàn bộ ký tự của bàn cờ (tránh lỗi chữ mất ký tự sau một thời gian)
 preloadBoardFont();
+
+/** Cỡ chữ tên / giá (đơn vị thế giới) — đủ lớn để đọc được khi bàn phóng đầy màn hình */
+const NAME_FONT = 0.55;
+const PRICE_FONT = 0.72;
+
+/** Cỡ chữ để từ DÀI NHẤT trong nhãn vừa bề ngang (nhãn dài tự xuống dòng) */
+function longestWordFit(text: string, maxWidth: number) {
+  const longest = Math.max(1, ...text.split(/\s+/).map((w) => w.length));
+  return maxWidth / (longest * 0.62);
+}
+
+/** Độ dày lớp mặt trên (phần sáng) của ô */
+const LIP_H = 0.14;
+
+/** Làm tối màu hex theo hệ số f (0..1) */
+function shade(hex: string, f: number) {
+  const c = new THREE.Color(hex);
+  c.multiplyScalar(f);
+  return `#${c.getHexString()}`;
+}
 
 /** Mặt trên của ô (toạ độ local, ô được đặt ở y = 0.1) */
 export const TILE_TOP = 0.02;
@@ -43,7 +66,7 @@ export function getBuildingAnchor(tile: Tile3DData): {
   alongZ: boolean;
 } {
   const layout = getTileLayout(tile);
-  const side = Math.floor(tile.id / 9);
+  const side = Math.floor(tile.id / 8);
   if (side === 2 && !layout.isCorner) {
     return { position: [0, TILE_TOP, -layout.d / 2 + 0.48], alongZ: false };
   }
@@ -53,25 +76,8 @@ export function getBuildingAnchor(tile: Tile3DData): {
   };
 }
 
-/**
- * Cỡ chữ vừa khít bề ngang ô: giữ cỡ mong muốn nếu đủ chỗ, tự thu nhỏ khi chữ dài
- * (ước lượng bề rộng trung bình 1 ký tự của font Nunito ExtraBold ~0.6 cỡ chữ).
- */
-function fitFontSize(text: string, desired: number, maxWidth: number) {
-  const est = Math.max(1, text.length) * 0.6;
-  return Math.min(desired, maxWidth / est);
-}
-
-/** Phóng to chữ ở các dãy xa camera để dễ đọc như dãy gần */
-function textScaleForSide(tileId: number) {
-  const side = Math.floor(tileId / 9);
-  if (side === 2) return 1.45;
-  if (side === 1 || side === 3) return 1.18;
-  return 1;
-}
-
 export function getTileLayout(tile: Tile3DData): TileLayout {
-  const isCorner = tile.id % 9 === 0;
+  const isCorner = tile.id % 8 === 0;
   const w = tile.size[0] - TILE_GAP;
   const d = tile.size[2] - TILE_GAP;
   if (isCorner) return { isCorner, band: [0, 0], body: [0, 0], w, d };
@@ -122,17 +128,20 @@ export default function Tile3D({
     ? BOARD_COLORS.tileBase
     : (special?.base ?? BOARD_COLORS.tileBase);
   const bandColor = isProperty ? tile.color : (special?.accent ?? tile.color);
-  const [dx, dz] = isCorner ? [0, 0] : innerDirection(tile.id);
+  const [, dz] = isCorner ? [0, 0] : innerDirection(tile.id);
   const bandSize: [number, number, number] =
     dz !== 0 ? [w, 0.05, BAND_DEPTH] : [BAND_DEPTH, 0.05, d];
 
+  // Độ dày khối: đáy ô chạm mặt đế bàn (y ≈ -0.08 trong toạ độ thế giới)
+  const thick = tile.position[1] + TILE_TOP + 0.08;
+  const sideColor = shade(bandColor, 0.55);
   const owned = tile.ownerId !== undefined;
   const label =
     isProperty || tile.type === "STATION"
       ? tile.name
       : (special?.label ?? tile.name);
 
-  const isFarRow = Math.floor(tile.id / 9) === 2;
+  const isFarRow = false;
   // Dòng giá: đất trống hiện giá mua, đất có chủ hiện tiền thuê
   // (đủ bộ màu: không ghi x2 ở đây — đã có dấu ×2 nổi phía trên ô).
   // Dãy xa nhìn rất nhỏ -> bỏ chữ "Thuê" (đã có màu & viền chủ sở hữu) để số tiền to hơn
@@ -143,29 +152,37 @@ export default function Tile3D({
         : `$${tile.landPrice ?? 0}`
       : null;
 
-  const bodyW = dx !== 0 ? w - BAND_DEPTH : w;
-  const k = textScaleForSide(tile.id);
-  // Dãy xa: dồn chữ về phía gần camera, chừa mép sau cho nhà
-  // Ô có biểu tượng (Cơ hội / Khí vận / Thuế): nhãn nằm DƯỚI biểu tượng (gần camera)
-  // để biểu tượng cao không che chữ
-  const nameZ = priceText
-    ? isFarRow
-      ? body[1] - 0.02
-      : body[1] - 0.28
-    : body[1] + (isFarRow ? 0.6 : 0.85);
-  const priceZ = isFarRow ? body[1] + 0.72 : body[1] + 0.42;
+  // Khung nhãn: (u, v) = (dọc theo hướng đọc, hướng xuống của chữ). Cả khối nhãn
+  // (tên + giá) xoay chung theo `labelYawBySide` nên không bao giờ lệch nhau / lộn ngược.
+  const side = sideOfTile(tile.id);
+  const labelYaw = isCorner ? CORNER_LABEL_YAW : labelYawBySide[side];
+  // Độ dài đọc được: dọc cạnh ô (sau khi xoay nhãn)
+  const readW = (side === 1 || side === 3 ? d : w) - 0.1;
+  const nameSize = Math.min(NAME_FONT, longestWordFit(label, readW));
+  const priceSize = priceText ? Math.min(PRICE_FONT, readW / (priceText.length * 0.62)) : 0;
+  // Ô có giá: tên ở trên, giá ở dưới. Ô đặc biệt: tên nằm DƯỚI biểu tượng.
+  const nameV = priceText ? -0.5 : 1.0;
+  const priceV = 0.72;
 
   return (
     <group>
-      {/* Khối nền ô bo góc mềm (như miếng nhựa đồ chơi) */}
+      {/* THÂN KHỐI: 2 mặt bên tối hơn (màu nhóm đã làm tối) + mặt trên sáng có cạnh vát */}
       <RoundedBox
-        args={[w, TILE_HEIGHT, d]}
-        radius={0.08}
+        args={[w, thick - LIP_H, d]}
+        radius={0.05}
+        smoothness={2}
+        position={[0, TILE_TOP - LIP_H - (thick - LIP_H) / 2, 0]}
+      >
+        <meshStandardMaterial color={sideColor} roughness={0.7} />
+      </RoundedBox>
+      <RoundedBox
+        args={[w, LIP_H, d]}
+        radius={0.06}
         smoothness={3}
-        position={[0, TILE_TOP - TILE_HEIGHT / 2, 0]}
+        position={[0, TILE_TOP - LIP_H / 2, 0]}
         receiveShadow
       >
-        <meshStandardMaterial color={baseColor} roughness={0.5} />
+        <meshStandardMaterial color={baseColor} roughness={0.45} />
       </RoundedBox>
 
       {/* Dải màu nhóm (phía trong bàn cờ), nổi nhẹ & bo tròn */}
@@ -192,22 +209,28 @@ export default function Tile3D({
       {/* Nhãn chữ (tải font riêng, không chặn hiển thị bàn cờ) */}
       <Suspense fallback={null}>
         {isCorner ? (
-          <Text
-            {...textProps}
-            position={[0, TEXT_Y + 0.05, d / 2 - 0.42]}
-            fontSize={0.42 * Math.min(k, 1.15)}
-            color={BOARD_COLORS.tileText}
-            outlineWidth="10%"
-          >
-            {label}
-          </Text>
-        ) : (
-          <>
+          <group position={[0, TEXT_Y + 0.05, 0]} rotation={[0, labelYaw, 0]}>
             <Text
               {...textProps}
-              position={[body[0], TEXT_Y, nameZ]}
-              fontSize={fitFontSize(label, 0.32 * k, bodyW * 0.9)}
-              maxWidth={bodyW * 0.92}
+              position={[0, 0, d / 2 - 0.5]}
+              fontSize={Math.min(0.5, longestWordFit(label, 2.4))}
+              maxWidth={2.5}
+              color={BOARD_COLORS.tileText}
+              outlineWidth="10%"
+            >
+              {label}
+            </Text>
+          </group>
+        ) : (
+          <group
+            position={[body[0], TEXT_Y, body[1]]}
+            rotation={[0, labelYaw, 0]}
+          >
+            <Text
+              {...textProps}
+              position={[0, 0, nameV]}
+              fontSize={nameSize}
+              maxWidth={readW}
               lineHeight={1}
               color={BOARD_COLORS.tileText}
             >
@@ -216,13 +239,10 @@ export default function Tile3D({
             {priceText && (
               <Text
                 {...textProps}
-                position={[body[0], TEXT_Y, priceZ]}
-                // Dãy xa: số tiền to gần gấp đôi để nhìn rõ từ camera
-                fontSize={fitFontSize(
-                  priceText,
-                  isFarRow ? 0.62 : 0.3 * k,
-                  bodyW * 0.94,
-                )}
+                position={[0, 0, priceV]}
+                fontSize={priceSize}
+                outlineWidth="12%"
+                outlineColor="#ffffff"
                 color={
                   isMonopoly
                     ? "#c2410c"
@@ -234,7 +254,7 @@ export default function Tile3D({
                 {priceText}
               </Text>
             )}
-          </>
+          </group>
         )}
       </Suspense>
     </group>

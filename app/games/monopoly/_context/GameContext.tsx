@@ -311,6 +311,11 @@ export function GameProvider({
   const [board, setBoard] = useState<TileData[]>(
     () => snap?.board ?? generateInitialBoard(economy.scale),
   );
+  // Ô Nhà Tù lấy theo dữ liệu bàn cờ (32 ô: ô 8) — không viết cứng số ô
+  const jailIndex = useMemo(
+    () => Math.max(0, board.findIndex((t) => t.type === "JAIL")),
+    [board],
+  );
   const [players, setPlayers] = useState<Player[]>(
     () =>
       snap?.players ??
@@ -766,7 +771,7 @@ export function GameProvider({
           p.id === playerId
             ? {
                 ...p,
-                tileIndex: 9,
+                tileIndex: jailIndex,
                 inJail: true,
                 jailTurns: 2,
                 doublesCount: 0,
@@ -798,7 +803,7 @@ export function GameProvider({
         p.id === playerId
           ? {
               ...p,
-              tileIndex: 9,
+              tileIndex: jailIndex,
               inJail: true,
               jailTurns: 2,
               doublesCount: 0,
@@ -1081,7 +1086,7 @@ export function GameProvider({
           p.id === currPlayer.id
             ? {
                 ...p,
-                tileIndex: 9,
+                tileIndex: jailIndex,
                 inJail: true,
                 jailTurns: 2,
                 doublesCount: 0,

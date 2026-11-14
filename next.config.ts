@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Tắt chấm chỉ báo "N" của Next.js (không để lọt vào giao diện chơi)
+  devIndicators: false,
   images: {
     remotePatterns: [
       {

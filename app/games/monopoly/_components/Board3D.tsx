@@ -1,7 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useIsCompact, useIsPhoneLandscape } from "./ui/useScreen";
-import { OrbitControls } from "@react-three/drei";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { useIsCompact } from "./ui/useScreen";
 import * as THREE from "three";
 import Pawn3D, { PawnState, PawnType } from "./Pawn3D";
 import Building3D, { HouseType } from "./Building3D";
@@ -28,9 +27,10 @@ import {
   getMonopolyGroups,
 } from "./board/MonopolyEffects";
 import CityCenter from "./board/CityCenter";
-import IslandEnvironment from "./board/IslandEnvironment";
+import CameraRig from "./board/CameraRig";
 import { GoIcon3D, StationIcon3D } from "./board/SpecialIcons";
 import { BOARD_COLORS } from "./board/theme";
+import { BOARD_CAMERA, type BoardFitMode } from "./board/cameraConfig";
 
 export interface Player3D {
   id: number;
@@ -610,6 +610,12 @@ interface Monopoly3DSceneProps {
   pawnStates: Record<number, PawnState>;
   isTravelSelecting?: boolean;
   onTileSelect?: (tileId: number) => void;
+  /** Chạm vào một ô (không phải kéo) -> mở thẻ thông tin */
+  onTileInfo?: (tileId: number) => void;
+  /** Phóng đầy chiều rộng (mặc định) hoặc toàn cảnh vừa khung */
+  fitMode?: BoardFitMode;
+  /** Người chơi mà camera tự theo (lượt hiện tại) */
+  focusPlayerId?: number;
 }
 
 function TravelSelectableTile({
@@ -661,57 +667,9 @@ function TravelSelectableTile({
 }
 
 // ---------------------------------------------------------------------------
-// CAMERA TỰ CO GIÃN THEO TỈ LỆ MÀN HÌNH
-// Bố cục gốc được thiết kế cho màn hình ngang (~1.45). Màn hình hẹp hơn (điện thoại
-// dọc, iPad dọc) sẽ lùi camera ra xa theo đúng tỉ lệ để luôn thấy trọn bề ngang bàn cờ.
+// CAMERA: cấu hình tập trung ở ./board/cameraConfig.ts. Chỉ camera thay đổi,
+// bàn cờ giữ nguyên toạ độ logic.
 // ---------------------------------------------------------------------------
-const CAMERA_TARGET = new THREE.Vector3(0, -1.5, 0);
-const CAMERA_HOME = new THREE.Vector3(0, 22, 16);
-const CAMERA_DIR = CAMERA_HOME.clone().sub(CAMERA_TARGET).normalize();
-const CAMERA_BASE_DISTANCE = CAMERA_HOME.distanceTo(CAMERA_TARGET);
-// Màn hình hẹp hơn tỉ lệ này thì lùi camera để vừa khít bề ngang bàn cờ (~90% chiều rộng)
-const DESIGN_ASPECT = 1.12;
-const MAX_CAMERA_FACTOR = 3.3;
-
-// Điện thoại xoay ngang: chiều cao là giới hạn -> kéo camera lại gần & dời điểm nhìn
-// về phía dãy gần để bàn cờ to hơn (phần viền ngoài của đảo bị cắt bớt cũng không sao)
-const PHONE_LANDSCAPE_ZOOM = 0.84;
-const DEFAULT_TARGET: [number, number, number] = [0, -1.5, 0];
-const PHONE_LANDSCAPE_TARGET: [number, number, number] = [0, -1.5, 2.2];
-
-function ResponsiveCamera({
-  zoom,
-  target,
-}: {
-  zoom: number;
-  target: [number, number, number];
-}) {
-  const camera = useThree((s) => s.camera);
-  const getState = useThree((s) => s.get);
-  const width = useThree((s) => s.size.width);
-  const height = useThree((s) => s.size.height);
-
-  useEffect(() => {
-    if (!width || !height) return;
-    const aspect = width / height;
-    // Bề ngang nhìn thấy tỉ lệ với (khoảng cách × tỉ lệ màn hình) -> bù lại khi màn hình hẹp
-    const k = Math.min(MAX_CAMERA_FACTOR, Math.max(1, DESIGN_ASPECT / aspect));
-    const dist = CAMERA_BASE_DISTANCE * k * zoom;
-    const t = new THREE.Vector3(...target);
-    camera.position.copy(t).addScaledVector(CAMERA_DIR, dist);
-    camera.lookAt(t);
-    camera.updateProjectionMatrix();
-    // Sương mù lùi theo camera để bàn cờ không bị mờ khi camera ở xa
-    const fog = getState().scene.fog;
-    if (fog instanceof THREE.Fog) {
-      fog.near = dist + 20;
-      fog.far = dist + 85;
-    }
-  }, [camera, getState, width, height, zoom, target]);
-
-  return null;
-}
-
 /** Khung viền vàng (4 thanh) quanh một hình vuông nửa cạnh `half` */
 function GoldTrim({
   half,
@@ -750,12 +708,26 @@ function Monopoly3DScene({
   pawnStates,
   isTravelSelecting = false,
   onTileSelect,
+  onTileInfo,
+  fitMode = "fillWidth",
+  focusPlayerId,
 }: Monopoly3DSceneProps) {
   const isCompact = useIsCompact();
-  const isPhoneLandscape = useIsPhoneLandscape();
-  const cameraTarget = isPhoneLandscape
-    ? PHONE_LANDSCAPE_TARGET
-    : DEFAULT_TARGET;
+  // Điểm camera cần giữ trong khung: ô quân cờ đang chơi (ưu tiên quân đang di chuyển)
+  // và các ô phía trước (6 ô) -> lấy điểm giữa
+  const focus = useMemo<[number, number] | null>(() => {
+    const mover = players?.find((p) => {
+      const st = pawnStates[p.id];
+      return st === "moving" || st === "flying";
+    });
+    const who = mover ?? players?.find((p) => p.id === focusPlayerId);
+    if (!who || !tiles.length) return null;
+    const a = tiles[who.tileIndex]?.position;
+    const b = tiles[(who.tileIndex + 6) % tiles.length]?.position;
+    if (!a) return null;
+    const bb = b ?? a;
+    return [(a[0] * 2 + bb[0]) / 3, (a[2] * 2 + bb[2]) / 3];
+  }, [players, pawnStates, tiles, focusPlayerId]);
   // Các nhóm màu mà 1 người sở hữu trọn bộ (tiền thuê x2 — chỉ để hiển thị)
   const monopolyGroups = useMemo(() => getMonopolyGroups(tiles), [tiles]);
 
@@ -763,8 +735,10 @@ function Monopoly3DScene({
     <Canvas
       style={{ width: "100%", height: "100%" }}
       camera={{
-        position: [0, 22, 16],
-        fov: 60,
+        position: [60, 80, 60],
+        fov: BOARD_CAMERA.fov,
+        near: BOARD_CAMERA.near,
+        far: BOARD_CAMERA.far,
       }}
       // Giới hạn độ phân giải trên màn hình retina để giảm tải GPU
       dpr={[1, 1.5]}
@@ -773,17 +747,16 @@ function Monopoly3DScene({
       // Không tone-mapping: màu tươi sáng kiểu đồ chơi
       flat
     >
-      <color attach="background" args={[BOARD_COLORS.sky]} />
-      <fog attach="fog" args={[BOARD_COLORS.sky, 48, 110]} />
-
+      <color attach="background" args={[BOARD_COLORS.backdrop]} />
+      
       <hemisphereLight args={["#e8f6ff", "#6f9a5a", 0.9]} />
       <ambientLight intensity={0.55} />
       <directionalLight
         position={[14, 28, 18]}
         intensity={1.7}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-left={-20}
         shadow-camera-right={20}
         shadow-camera-top={20}
@@ -793,21 +766,8 @@ function Monopoly3DScene({
         shadow-bias={-0.0005}
       />
 
-      <ResponsiveCamera
-        zoom={isPhoneLandscape ? PHONE_LANDSCAPE_ZOOM : 1}
-        target={cameraTarget}
-      />
-      <OrbitControls
-        enableRotate={false}
-        enablePan={false}
-        enableZoom={true}
-        minDistance={15}
-        maxDistance={CAMERA_BASE_DISTANCE * MAX_CAMERA_FACTOR + 10}
-        target={cameraTarget}
-      />
+      <CameraRig mode={fitMode} focus={focus} />
 
-      {/* Đảo, biển, đường & xe buýt, mây */}
-      <IslandEnvironment />
 
       {/* Đế bàn cờ + viền vàng */}
       <mesh position={[0, -0.46, 0]} receiveShadow castShadow>
@@ -815,7 +775,7 @@ function Monopoly3DScene({
         <meshStandardMaterial color={BOARD_COLORS.slab} roughness={0.5} />
       </mesh>
       <GoldTrim half={13.95} y={-0.03} />
-      <GoldTrim half={9.95} y={-0.03} t={0.12} />
+      <GoldTrim half={9.3} y={-0.03} t={0.12} />
 
       {/* Thành phố trung tâm */}
       <CityCenter />
@@ -848,11 +808,20 @@ function Monopoly3DScene({
         const iconPos: [number, number, number] = [
           layout.body[0],
           TILE_TOP,
-          layout.body[1] - (Math.floor(tile.id / 9) === 2 ? 0.45 : 0.3),
+          layout.body[1] - (Math.floor(tile.id / 8) === 2 ? 0.45 : 0.3),
         ];
 
         return (
-          <group key={tile.id} position={tile.position}>
+          <group
+            key={tile.id}
+            position={tile.position}
+            onClick={(e) => {
+              // Bỏ qua khi người chơi đang kéo / pinch camera
+              if (e.delta > 6 || isTravelSelecting) return;
+              e.stopPropagation();
+              onTileInfo?.(tile.id);
+            }}
+          >
             <Tile3D tile={tile} isMonopoly={isMono} />
 
             {/* Đủ bộ màu: dải màu phát sáng + huy hiệu x2 */}
