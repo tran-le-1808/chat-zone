@@ -40,12 +40,15 @@ export function ToolButton({
 }
 
 /** Cửa sổ nhỏ nổi lên phía trên thanh công cụ (vd. chỉnh góc nâng cơ) */
-export function ToolPopover({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+export function ToolPopover({ open, onClose, children, side = "up" }: { open: boolean; onClose: () => void; children: ReactNode; side?: "up" | "left" | "right" }) {
   if (!open) return null;
+  // "left"/"right": mở ngang cạnh nút (thanh công cụ xếp dọc ở cạnh màn hình); "up": mở lên trên nút
+  const pos =
+    side === "left" ? "right-full top-1/2 mr-2 -translate-y-1/2" : side === "right" ? "left-full top-1/2 ml-2 -translate-y-1/2" : "bottom-full right-0 mb-2";
   return (
     <>
       <div className="fixed inset-0 z-20" onPointerDown={onClose} />
-      <div className="absolute bottom-full right-0 z-30 mb-2 w-60 rounded-2xl border border-white/15 bg-[#11132a]/95 p-3 text-white shadow-2xl backdrop-blur-md">{children}</div>
+      <div className={`absolute z-30 w-60 rounded-2xl border border-white/15 bg-[#11132a]/95 p-3 text-white shadow-2xl backdrop-blur-md ${pos}`}>{children}</div>
     </>
   );
 }
@@ -67,6 +70,11 @@ export interface ShotHudProps {
   onAimNudge: (deg: number) => void;
   /** Các công cụ phụ của game (góc cơ, gọi bi, phòng thủ…) */
   tools?: ReactNode;
+  /**
+   * Cách xếp công cụ trên MÀN HÌNH NHỎ (điện thoại): "side" = cột dọc ngay phía TRÊN bi cái, ở cạnh
+   * thuận tay; "bottom" (mặc định) = hàng ngang bên cạnh bi cái. Màn hình lớn luôn xếp hàng ngang.
+   */
+  toolsLayoutMobile?: "bottom" | "side";
   /** Cảnh báo (vd. cơ vướng băng) */
   notice?: ReactNode;
 }
@@ -78,7 +86,7 @@ export interface ShotHudProps {
  *  - Space giữ để lấy lực / thả để đánh, Esc huỷ, ←/→ chỉnh ngắm.
  * Tôn trọng safe area. Không có nút "Đánh".
  */
-export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, onTip, limits, ballColor, onAimNudge, tools, notice }: ShotHudProps) {
+export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, onTip, limits, ballColor, onAimNudge, tools, notice, toolsLayoutMobile = "bottom" }: ShotHudProps) {
   const [origin, setOrigin] = useState<DOMRect | null>(null);
   const lefty = settings.hand === "left";
   const api = useRef({ shot, onAimNudge, settings });
@@ -151,6 +159,7 @@ export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, on
   }, []);
 
   const locked = !enabled;
+  const sideTools = toolsLayoutMobile === "side";
   return (
     <div className="pointer-events-none absolute inset-0 z-10 select-none" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
       {/* Thanh kéo cơ: cạnh đối diện tay thuận, cao ~60% khung */}
@@ -169,7 +178,13 @@ export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, on
       {notice && <div className="pointer-events-auto absolute inset-x-0 bottom-[84px] flex justify-center px-3">{notice}</div>}
 
       {/* Đáy: công cụ nhỏ + bi cái nhỏ ở góc thuận tay */}
-      <div className={`absolute bottom-2 flex items-end gap-2 ${lefty ? "left-2 flex-row" : "right-2 flex-row-reverse"} [@media(max-height:500px)]:bottom-1`}>
+      <div
+        className={`absolute bottom-2 flex gap-2 [@media(max-height:500px)]:bottom-1 ${
+          sideTools
+            ? `max-md:flex-col-reverse max-md:gap-5 [@media(max-height:500px)]:flex-col-reverse [@media(max-height:500px)]:gap-5 ${lefty ? "left-2 items-start" : "right-2 items-end"} md:items-end ${lefty ? "md:flex-row" : "md:flex-row-reverse"}`
+            : `items-end ${lefty ? "left-2 flex-row" : "right-2 flex-row-reverse"}`
+        }`}
+      >
         <div className="pointer-events-auto relative">
           <SpinMini
             tipX={tipX}
@@ -182,7 +197,13 @@ export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, on
             }}
           />
         </div>
-        <div className={`pointer-events-auto relative flex max-w-[calc(100vw-9rem)] flex-wrap items-end gap-1.5 ${lefty ? "" : "justify-end"}`}>
+        <div
+          className={`pointer-events-auto relative flex gap-1.5 ${
+            sideTools
+              ? `max-md:flex-col [@media(max-height:500px)]:flex-col ${lefty ? "items-start" : "items-end"} md:max-w-[calc(100vw-9rem)] md:flex-row md:flex-wrap md:items-end ${lefty ? "" : "md:justify-end"}`
+              : `max-w-[calc(100vw-9rem)] flex-wrap items-end ${lefty ? "" : "justify-end"}`
+          }`}
+        >
           {tools}
         </div>
       </div>

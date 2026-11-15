@@ -27,7 +27,7 @@ function IconBtn({ onClick, label, children, disabled }: { onClick: () => void; 
       disabled={disabled}
       title={label}
       aria-label={label}
-      className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-40 [@media(max-height:500px)]:px-1 [@media(max-height:500px)]:py-0.5"
+      className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-40 max-md:px-1 max-md:py-0.5 [@media(max-height:500px)]:px-1 [@media(max-height:500px)]:py-0.5 [&_svg]:max-md:h-3.5 [&_svg]:max-md:w-3.5"
     >
       {children}
     </button>
@@ -163,7 +163,7 @@ function GameLayout({ onExit }: { onExit: () => void }) {
   return (
     <div className="flex h-dvh w-screen flex-col overflow-hidden bg-[#0d0f1e] text-white select-none">
       <RotateDeviceOverlay />
-      <header className="flex shrink-0 items-center gap-1.5 px-1.5 py-1 [@media(max-height:500px)]:gap-1 [@media(max-height:500px)]:py-0.5">
+      <header className="flex shrink-0 items-center gap-1.5 px-1.5 py-1 max-md:gap-1 max-md:py-0.5 [@media(max-height:500px)]:gap-1 [@media(max-height:500px)]:py-px">
         <div className="flex shrink-0 items-center gap-0 rounded-xl border border-white/10 bg-black/40 p-0.5">
           <IconBtn onClick={() => void leave()} label="Thoát">
             <LogOut className="h-4 w-4 text-rose-300" />
@@ -190,7 +190,7 @@ function GameLayout({ onExit }: { onExit: () => void }) {
           <GameChat
             variant="modal"
             trigger={({ onClick, unread }) => (
-              <button type="button" onClick={onClick} aria-label="Mở chat" className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/40 text-slate-200 hover:bg-white/10">
+              <button type="button" onClick={onClick} aria-label="Mở chat" className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/40 text-slate-200 hover:bg-white/10 max-md:h-6 max-md:w-6 max-md:rounded-lg">
                 <MessageCircle className="h-4 w-4" />
                 {unread > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#c81d25] px-1 text-[9px] font-black text-white">{unread > 9 ? "9+" : unread}</span>}
               </button>

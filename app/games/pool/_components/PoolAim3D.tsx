@@ -154,6 +154,53 @@ function CueStick({ visible }: { visible: boolean }) {
   );
 }
 
+/** Texture biểu tượng cấm 🚫 (vòng đỏ + gạch chéo trên nền trắng mờ) — tạo một lần */
+let _banTex: THREE.CanvasTexture | null = null;
+function banTexture() {
+  if (_banTex) return _banTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  if (g) {
+    g.beginPath();
+    g.arc(64, 64, 58, 0, Math.PI * 2);
+    g.fillStyle = "rgba(255,255,255,0.78)";
+    g.fill();
+    g.lineWidth = 12;
+    g.strokeStyle = "#e11d2e";
+    g.stroke();
+    g.beginPath();
+    g.moveTo(24, 24);
+    g.lineTo(104, 104);
+    g.lineWidth = 13;
+    g.lineCap = "round";
+    g.stroke();
+  }
+  _banTex = new THREE.CanvasTexture(c);
+  _banTex.colorSpace = THREE.SRGBColorSpace;
+  return _banTex;
+}
+
+/**
+ * Chỉ khi đang NGẮM VÀO một bi mà chạm đầu tiên bi đó là KHÔNG hợp lệ (theo luật hiện tại: nhóm của
+ * mình, bi thấp nhất ở 9 bi, bi 8 khi đã hết nhóm…) thì hiện icon cấm trên đúng bi đó.
+ * Chỉ là gợi ý hiển thị, không đổi luật.
+ */
+function IllegalMark({ hitBall }: { hitBall: number | null }) {
+  const { rack, canShoot, practice, targets, phase } = usePool();
+  const tex = useMemo(() => banTexture(), []);
+  if (hitBall === null || hitBall === 0 || !canShoot || practice || phase !== "idle" || rack.decision) return null;
+  // Không có bi hợp lệ nào (vd. thế bàn chờ lựa chọn) -> không đánh dấu gì
+  if (!targets.length || targets.includes(hitBall)) return null;
+  const b = rack.balls.find((x) => x.n === hitBall);
+  if (!b) return null;
+  return (
+    <sprite position={[b.x, R * 2.5, -b.y]} scale={[R * 2.7, R * 2.7, 1]} renderOrder={30}>
+      <spriteMaterial map={tex} transparent depthTest={false} depthWrite={false} toneMapped={false} />
+    </sprite>
+  );
+}
+
 /** Đường ngắm (bi ma, hướng bi mục tiêu, hướng bi cái theo quy tắc 90°) + cây cơ */
 export default function PoolAim3D() {
   const { rack, aim, canShoot, phase, prefs, effectiveCall, isHumanTurn, table: T, setup } = usePool();
@@ -236,6 +283,7 @@ export default function PoolAim3D() {
         )
       )}
       {callMarks}
+      <IllegalMark hitBall={showAim && cast ? cast.hitBall : null} />
       <CueStick visible={showAim} />
     </group>
   );

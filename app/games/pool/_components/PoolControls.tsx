@@ -10,6 +10,7 @@ import { groupCleared } from "../_lib/rules/common";
 import ShotHud, { ToolButton, ToolPopover } from "../../_shared/shot/ShotHud";
 import VoiceControls from "../../monopoly/_components/VoiceControls";
 import { usePool } from "./PoolContext";
+import { useIsCompact } from "../../monopoly/_components/ui/useScreen";
 
 export function MiniBall({ n, size = 18 }: { n: number; size?: number }) {
   return (
@@ -62,6 +63,7 @@ export default function PoolControls({ onOpenCall }: { onOpenCall: () => void })
   const p = usePool();
   const { aim, setAim, canShoot, rack, phase, decl, setDecl, effectiveCall, needsCall, placing, setPlacing, practice, isHumanTurn, physics, table, clearance } = p;
   const [elevOpen, setElevOpen] = useState(false);
+  const isCompactTools = useIsCompact();
 
   const showCall = needsCall && isHumanTurn;
   const canSafety = !practice && rack.type === "eight" && !rack.isBreak && isHumanTurn;
@@ -113,7 +115,7 @@ export default function PoolControls({ onOpenCall }: { onOpenCall: () => void })
           <TrendingUp className="h-5 w-5" />
           <span className="tabular-nums">{aim.elevation.toFixed(0)}°</span>
         </ToolButton>
-        <ToolPopover open={elevOpen} onClose={() => setElevOpen(false)}>
+        <ToolPopover open={elevOpen} onClose={() => setElevOpen(false)} side={isCompactTools ? (p.shotSettings.hand === "left" ? "right" : "left") : "up"}>
           <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
             <span className="flex justify-between">
               Góc nâng cơ <span className="tabular-nums text-white">{aim.elevation.toFixed(0)}°</span>
@@ -155,6 +157,7 @@ export default function PoolControls({ onOpenCall }: { onOpenCall: () => void })
       ballColor="#f4efe1"
       onAimNudge={p.rotateAim}
       tools={tools}
+      toolsLayoutMobile="side"
       notice={notice}
     />
   );
