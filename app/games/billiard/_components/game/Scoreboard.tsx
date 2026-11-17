@@ -17,19 +17,19 @@ import {
 function TurnTimer({
   deadline,
   paused,
+  seconds = BILLIARD_TURN_SECONDS,
 }: {
   deadline: number;
   paused: boolean;
+  seconds?: number;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, []);
-  const remain = paused
-    ? BILLIARD_TURN_SECONDS
-    : Math.max(0, (deadline - now) / 1000);
-  const pct = Math.min(100, (remain / BILLIARD_TURN_SECONDS) * 100);
+  const remain = paused ? seconds : Math.max(0, (deadline - now) / 1000);
+  const pct = Math.min(100, (remain / seconds) * 100);
   const urgent = remain <= 10 && !paused;
   return (
     <div className="flex w-full items-center gap-2">
@@ -132,7 +132,11 @@ export default function Scoreboard() {
         {cards[1]}
       </div>
       {match.winner === null && (
-        <TurnTimer deadline={turnDeadlineLocal} paused={animating} />
+        <TurnTimer
+          deadline={turnDeadlineLocal}
+          paused={animating}
+          seconds={match?.turnSeconds ?? BILLIARD_TURN_SECONDS}
+        />
       )}
     </div>
   );

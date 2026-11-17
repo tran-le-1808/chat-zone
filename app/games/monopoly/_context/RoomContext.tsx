@@ -121,7 +121,17 @@ export function RoomProvider({
         setError("Không kết nối được tới máy chủ");
         return;
       }
-      const res = await monoEmit<JoinResult>(`${prefix}:join`, { code });
+      // phòng bida riêng tư có mật khẩu: mật khẩu nhập ở sảnh được lưu tạm trong tab
+      let password: string | null = null;
+      try {
+        password = sessionStorage.getItem(`${prefix}:pass:${code}`);
+      } catch {
+        password = null;
+      }
+      const res = await monoEmit<JoinResult>(
+        `${prefix}:join`,
+        password ? { code, password } : { code },
+      );
       if (cancelled) return;
       if (!res.ok || !res.data) {
         setUiStatus("error");

@@ -226,8 +226,8 @@ export default function BilliardWaitingRoom() {
           {settings.mode === "free"
             ? "Phăng: bi cái chạm được cả 2 bi còn lại là ghi 1 điểm."
             : "3 băng: bi cái phải chạm ít nhất 3 lần vào băng trước khi chạm bi mục tiêu thứ hai."}{" "}
-          Ghi điểm thì được đánh tiếp. Mỗi lượt tối đa {BILLIARD_TURN_SECONDS}{" "}
-          giây.
+          Ghi điểm thì được đánh tiếp. Mỗi lượt tối đa{" "}
+          {settings.turnSeconds ?? BILLIARD_TURN_SECONDS} giây.
         </span>
       </p>
     </>

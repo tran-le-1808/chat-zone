@@ -1,6 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { socket } from "@/lib/socket";
 import { useRoom } from "../../../monopoly/_context/RoomContext";
+import type { BilliardRoomExtra, MatchResultEvent } from "../../_lib/lobbyTypes";
 import PlayerAvatar from "../../../monopoly/_components/PlayerAvatar";
 import { useBilliard } from "../../_context/BilliardGameContext";
 import { BALL_COLORS, MODE_LABEL } from "../../_lib/types";
@@ -14,7 +18,26 @@ const fmtTime = (ms: number) => {
 export default function ResultModal() {
   const { room, isHost, resetToLobby, leaveRoom } = useRoom();
   const { match, animating, myIndex } = useBilliard();
+  const router = useRouter();
+  // kết quả do server ghi (rating / thăng hạng) — gửi riêng cho từng người
+  const [result, setResult] = useState<MatchResultEvent | null>(null);
+  useEffect(() => {
+    const onResult = (d: MatchResultEvent) => {
+      if (d.roomCode === room?.code) setResult(d);
+    };
+    socket.on("bida:match:result", onResult);
+    return () => {
+      socket.off("bida:match:result", onResult);
+    };
+  }, [room?.code]);
   if (!match || match.winner === null || animating || !room) return null;
+  const extra = room as unknown as BilliardRoomExtra;
+  const matchRoom = !!extra.kind && extra.kind !== "casual";
+  const tournamentId = extra.meta?.tournamentId ?? null;
+  const backToHub = async () => {
+    await leaveRoom();
+    if (tournamentId) router.push(`/games/billiard/tournament/${tournamentId}`);
+  };
 
   const winnerId = match.players[match.winner];
   const winner = room.players.find((p) => p.userId === winnerId);
@@ -92,8 +115,40 @@ export default function ResultModal() {
           </tbody>
         </table>
 
+        {result && (result.gameMode === "RANKED" || result.rated) && (
+          <div className="mx-4 mt-3 rounded-2xl bg-white/5 p-3 text-center">
+            {result.rated ? (
+              <>
+                <p className="text-xs uppercase tracking-wider text-gray-400">Điểm xếp hạng {result.discipline === "three" ? "3 băng" : "Libre"}</p>
+                <p className="text-lg font-black">
+                  {result.me.before} → {result.me.after}{" "}
+                  <span className={result.me.delta >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                    ({result.me.delta >= 0 ? "+" : ""}
+                    {result.me.delta})
+                  </span>
+                </p>
+                {(result.me.promoted || result.me.demoted) && (
+                  <p className={`mt-1 animate-bounce font-black ${result.me.promoted ? "text-amber-300" : "text-rose-300"}`}>
+                    {result.me.promoted ? `🎉 Thăng hạng: ${result.me.rankAfter}` : `Tụt hạng: ${result.me.rankAfter}`}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-gray-300">{result.unratedReason ?? "Trận này không tính điểm xếp hạng"}</p>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2 p-4">
-          {isHost ? (
+          {matchRoom ? (
+            <button
+              type="button"
+              onClick={() => void backToHub()}
+              className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-400 to-cyan-500 py-3 font-black text-slate-900"
+            >
+              {tournamentId ? "🏆 Về giải đấu" : "🏠 Về sảnh"}
+            </button>
+          ) : isHost ? (
             <button
               type="button"
               onClick={() => void resetToLobby()}
@@ -106,13 +161,15 @@ export default function ResultModal() {
               Chờ chủ phòng mở ván mới…
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => void leaveRoom()}
-            className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-bold"
-          >
-            Rời phòng
-          </button>
+          {!matchRoom && (
+            <button
+              type="button"
+              onClick={() => void leaveRoom()}
+              className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-bold"
+            >
+              Rời phòng
+            </button>
+          )}
         </div>
       </div>
     </div>

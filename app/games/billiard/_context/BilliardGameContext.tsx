@@ -125,10 +125,12 @@ const newShotId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+/** Cài đặt đã lưu — riêng góc camera KHÔNG khôi phục: mỗi trận luôn bắt đầu nhìn từ trên xuống */
 function loadPrefs(): BilliardPrefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    return raw ? { ...DEFAULT_PREFS, ...JSON.parse(raw) } : DEFAULT_PREFS;
+    const saved = raw ? (JSON.parse(raw) as Partial<BilliardPrefs>) : {};
+    return { ...DEFAULT_PREFS, ...saved, camera: DEFAULT_PREFS.camera };
   } catch {
     return DEFAULT_PREFS;
   }
@@ -170,7 +172,10 @@ export function BilliardGameProvider({
     setPrefsState((prev) => {
       const next = { ...prev, ...patch };
       try {
-        localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+        // góc camera chỉ áp dụng trong trận hiện tại (không lưu)
+        const { camera: _camera, ...persist } = next;
+        void _camera;
+        localStorage.setItem(PREFS_KEY, JSON.stringify(persist));
       } catch {
         /* bỏ qua */
       }

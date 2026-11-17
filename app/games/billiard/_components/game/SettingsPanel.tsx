@@ -101,8 +101,8 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
             }
             className="rounded-lg border border-white/10 bg-[#262a40] px-2 py-1 text-xs"
           >
+            <option value="top">Nhìn từ trên (mặc định)</option>
             <option value="angle">Góc nghiêng</option>
-            <option value="top">Nhìn từ trên</option>
           </select>
         </Row>
         <Row label="Debug vật lý (vector v / ω)">

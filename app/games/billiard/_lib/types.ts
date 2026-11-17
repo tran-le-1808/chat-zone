@@ -25,6 +25,10 @@ export const MODE_LABEL: Record<CaromMode, string> = {
 
 export interface BilliardSettings {
   isPrivate: boolean;
+  /** Tên phòng (casual) */
+  name?: string;
+  /** Thời gian mỗi lượt (giây) */
+  turnSeconds?: number;
   mode: CaromMode;
   target: number;
   guideline: boolean;
@@ -77,6 +81,8 @@ export interface BilliardMatch {
   startedAt: number;
   endedAt?: number;
   serverNow?: number;
+  /** Thời gian mỗi lượt của trận (giây) */
+  turnSeconds?: number;
 }
 
 /** Màu bi theo chỉ số: 0 trắng, 1 vàng, 2 đỏ */

@@ -5,6 +5,8 @@ import { useRoom } from "../../../monopoly/_context/RoomContext";
 import { VoiceProvider } from "../../../monopoly/_context/VoiceContext";
 import { BilliardGameProvider } from "../../_context/BilliardGameContext";
 import BilliardWaitingRoom from "./BilliardWaitingRoom";
+import MatchLobbyScreen from "./MatchLobbyScreen";
+import type { BilliardRoomExtra } from "../../_lib/lobbyTypes";
 import BilliardGame from "../game/BilliardGame";
 
 /** Phòng bida: đang kết nối / lỗi / phòng chờ / trận đấu (voice giữ nguyên khi chuyển) */
@@ -33,6 +35,11 @@ export default function BilliardRoomScreen() {
           >
             Về sảnh Bida
           </Link>
+          {/mật khẩu/i.test(error ?? "") && (
+            <p className="text-xs text-slate-500">
+              Vào lại từ danh sách phòng ở sảnh để nhập mật khẩu.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -41,7 +48,12 @@ export default function BilliardRoomScreen() {
   return (
     <VoiceProvider>
       {room.status === "lobby" ? (
-        <BilliardWaitingRoom />
+        (room as unknown as BilliardRoomExtra).kind &&
+        (room as unknown as BilliardRoomExtra).kind !== "casual" ? (
+          <MatchLobbyScreen />
+        ) : (
+          <BilliardWaitingRoom />
+        )
       ) : (
         <BilliardGameProvider key={gameSession}>
           <BilliardGame />

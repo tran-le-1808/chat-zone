@@ -5,7 +5,13 @@ import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import Table3D, { TABLE_OUTER } from "./Table3D";
+import Table3D from "./Table3D";
+import {
+  cameraLimits,
+  fitCameraDistance,
+  tableConfigForMode,
+  type CaromTableConfig,
+} from "../../_lib/physics";
 import Balls3D from "./Balls3D";
 import AimLayer from "./AimLayer";
 import { useBilliard } from "../../_context/BilliardGameContext";
@@ -13,7 +19,7 @@ import { useIsCompact } from "../../../monopoly/_components/ui/useScreen";
 import { aimTowards, onCueShaft, pullFromAlong, rotatedAim } from "../../../_shared/shot/shotMath";
 
 /** Camera canh vừa bàn theo tỉ lệ màn hình; đổi chế độ nhìn thì đặt lại */
-function CameraRig({ mode }: { mode: "top" | "angle" }) {
+function CameraRig({ mode, table }: { mode: "top" | "angle"; table: CaromTableConfig }) {
   const { camera, size } = useThree();
   const controls = useThree(
     (s) => s.controls as unknown as OrbitControlsImpl | null,
@@ -21,12 +27,8 @@ function CameraRig({ mode }: { mode: "top" | "angle" }) {
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
     const aspect = size.width / Math.max(1, size.height);
-    const fov = (cam.fov * Math.PI) / 180;
-    // Khoảng cách để cả bàn lọt khung (theo chiều dọc & ngang)
-    // Bàn to hơn: bỏ ~8 cm viền gỗ ngoài cùng mỗi phía khỏi khung hình
-    const fitH = (TABLE_OUTER.h - 0.16) / 2 / Math.tan(fov / 2);
-    const fitW = (TABLE_OUTER.w - 0.16) / 2 / (Math.tan(fov / 2) * aspect);
-    const dist = Math.max(fitH, fitW) * (mode === "top" ? 1 : 0.99);
+    // Khoảng cách để cả bàn (theo phủ bì cấu hình) lọt khung ở mọi tỉ lệ màn hình — không cắt cạnh
+    const dist = fitCameraDistance(table, aspect, cam.fov) * (mode === "top" ? 1 : 0.99);
     if (mode === "top") cam.position.set(0, dist, 0.001);
     else cam.position.set(0, dist * 0.82, dist * 0.62);
     // Góc nghiêng: nhìn lệch về phía gần camera một chút để bàn lấp đầy khung (không thừa khoảng trống phía trên)
@@ -37,7 +39,7 @@ function CameraRig({ mode }: { mode: "top" | "angle" }) {
       controls.target.set(0, 0, lookZ);
       controls.update();
     }
-  }, [camera, size.width, size.height, mode, controls]);
+  }, [camera, size.width, size.height, mode, controls, table]);
   return null;
 }
 
@@ -46,7 +48,7 @@ function CameraRig({ mode }: { mode: "top" | "angle" }) {
  * của ngón tay, không bị nhảy); chuột trỏ thẳng điểm ngắm. Có tuỳ chọn kéo cơ trực tiếp trên
  * bàn. Đang mở bi lớn thì khoá hết.
  */
-function AimInput() {
+function AimInput({ table }: { table: CaromTableConfig }) {
   const { match, canShoot, setAim, aim, shot, shotSettings } = useBilliard();
   const drag = useRef<{
     kind: "aim" | "pull";
@@ -136,21 +138,26 @@ function AimInput() {
         if (drag.current?.kind !== "pull") end();
       }}
     >
-      <planeGeometry args={[TABLE_OUTER.w + 2, TABLE_OUTER.h + 2]} />
+      <planeGeometry args={[table.outerDimensions.length + 2, table.outerDimensions.width + 2]} />
       <meshBasicMaterial visible={false} />
     </mesh>
   );
 }
 
 export default function BilliardScene() {
-  const { prefs } = useBilliard();
+  const { prefs, match } = useBilliard();
   const isCompact = useIsCompact();
+  // Phăng chơi trên bàn Libre, 3 băng trên bàn 3 băng (cùng mặt thi đấu 2.84 × 1.42 m)
+  const table = tableConfigForMode(match?.mode ?? "free");
+  // zoom xa nhất tính theo màn dọc hẹp nhất để camera canh vừa bàn không bị giới hạn zoom cắt mất
+  const limits = cameraLimits(table, fitCameraDistance(table, 0.45, 40));
 
   return (
     <Canvas
       shadows={!isCompact}
       dpr={[1, 1.75]}
-      camera={{ fov: 40, near: 0.05, far: 40, position: [0, 3.5, 2.5] }}
+      // mặc định nhìn từ trên xuống (CameraRig canh lại khoảng cách cho vừa bàn)
+      camera={{ fov: 40, near: 0.05, far: 40, position: [0, 4.2, 0.001] }}
       gl={{ antialias: true }}
       style={{ touchAction: "none" }}
     >
@@ -173,16 +180,16 @@ export default function BilliardScene() {
         castShadow
         shadow-mapSize={[1024, 1024]}
       />
-      <Table3D />
+      <Table3D config={table} />
       <Balls3D debug={prefs.debug} />
       <AimLayer />
-      <AimInput />
+      <AimInput table={table} />
       <OrbitControls
         makeDefault
         enablePan={false}
-        minDistance={1.2}
-        maxDistance={6}
-        maxPolarAngle={Math.PI * 0.45}
+        minDistance={limits.minDistance}
+        maxDistance={limits.maxDistance}
+        maxPolarAngle={limits.maxPolarAngle}
         mouseButtons={{
           LEFT: undefined as unknown as THREE.MOUSE,
           MIDDLE: THREE.MOUSE.DOLLY,
@@ -193,7 +200,7 @@ export default function BilliardScene() {
           TWO: THREE.TOUCH.DOLLY_ROTATE,
         }}
       />
-      <CameraRig mode={prefs.camera} />
+      <CameraRig mode={prefs.camera} table={table} />
     </Canvas>
   );
 }

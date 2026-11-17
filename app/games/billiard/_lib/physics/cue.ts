@@ -72,7 +72,11 @@ export function sanitizeShot(
 export const MASSE_START_DEG = 8;
 export const MASSE_FULL_DEG = 15;
 export function masseGate(elevationDeg: number): number {
-  const t = clamp((elevationDeg - MASSE_START_DEG) / (MASSE_FULL_DEG - MASSE_START_DEG), 0, 1);
+  const t = clamp(
+    (elevationDeg - MASSE_START_DEG) / (MASSE_FULL_DEG - MASSE_START_DEG),
+    0,
+    1,
+  );
   return t * t * (3 - 2 * t);
 }
 

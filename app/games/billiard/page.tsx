@@ -1,13 +1,13 @@
 "use client";
 
-import MainLayout from "@/components/layout/MainLayout";
-import BilliardLobby from "./_components/lobby/BilliardLobby";
+import HubShell from "./_components/hub/HubShell";
+import LobbyHome from "./_components/hub/LobbyHome";
 
-/** Sảnh Bida Carom online: tạo phòng / vào phòng bằng mã / danh sách phòng */
+/** Sảnh Bida Carom: hồ sơ, 4 chế độ (Quick / Ranked / Casual / Tournament), giải đấu, xếp hạng, online */
 export default function BilliardLobbyPage() {
   return (
-    <MainLayout>
-      <BilliardLobby />
-    </MainLayout>
+    <HubShell>
+      <LobbyHome />
+    </HubShell>
   );
 }
