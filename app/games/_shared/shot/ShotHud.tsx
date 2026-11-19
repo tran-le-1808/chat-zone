@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import PowerPull from "./PowerPull";
 import { SpinMini, SpinModal } from "./SpinPicker";
@@ -15,6 +16,7 @@ export function ToolButton({
   onClick,
   children,
   badge,
+  bright,
 }: {
   label: string;
   active?: boolean;
@@ -22,6 +24,8 @@ export function ToolButton({
   onClick: () => void;
   children: ReactNode;
   badge?: string;
+  /** nền sáng hơn để nút dễ thấy trên mặt bàn tối */
+  bright?: boolean;
 }) {
   return (
     <button
@@ -31,24 +35,79 @@ export function ToolButton({
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={`relative flex h-12 min-w-12 shrink-0 items-center justify-center gap-1 rounded-2xl border px-2 text-xs font-extrabold shadow transition active:scale-95 disabled:opacity-40 ${active ? "border-[#f4b942] bg-[#f4b942] text-[#1a1206]" : "border-white/15 bg-black/50 text-slate-100 backdrop-blur-sm"}`}
+      className={`relative flex h-12 min-w-12 shrink-0 items-center justify-center gap-1 rounded-2xl border px-2 text-xs font-extrabold shadow transition active:scale-95 disabled:opacity-40 ${active ? "border-[#f4b942] bg-[#f4b942] text-[#1a1206]" : bright ? "border-white/40 bg-slate-600/80 text-white ring-1 ring-white/20 backdrop-blur-sm" : "border-white/15 bg-black/50 text-slate-100 backdrop-blur-sm"}`}
     >
       {children}
-      {badge && <span className="absolute -right-1 -top-1 rounded-full bg-[#c81d25] px-1 text-[9px] font-black text-white">{badge}</span>}
+      {badge && (
+        <span className="absolute -right-1 -top-1 rounded-full bg-[#c81d25] px-1 text-[9px] font-black text-white">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
 
 /** Cửa sổ nhỏ nổi lên phía trên thanh công cụ (vd. chỉnh góc nâng cơ) */
-export function ToolPopover({ open, onClose, children, side = "up" }: { open: boolean; onClose: () => void; children: ReactNode; side?: "up" | "left" | "right" }) {
+export function ToolPopover({
+  open,
+  onClose,
+  children,
+  side = "up",
+  title,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  side?: "up" | "left" | "right" | "center";
+  title?: string;
+}) {
   if (!open) return null;
+  if (side === "center") {
+    // modal giữa màn hình — portal ra body để không bị transform/overflow của HUD cắt hoặc lệch
+    if (typeof document === "undefined") return null;
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+        onPointerDown={onClose}
+      >
+        <div
+          className="w-72 max-w-full rounded-2xl border border-white/15 bg-[#11132a]/95 p-4 text-white shadow-2xl backdrop-blur-md"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {title && (
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-bold">{title}</span>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full px-2 text-lg leading-none text-white/60 hover:bg-white/10 hover:text-white"
+                aria-label="Đóng"
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {children}
+        </div>
+      </div>,
+      document.body,
+    );
+  }
   // "left"/"right": mở ngang cạnh nút (thanh công cụ xếp dọc ở cạnh màn hình); "up": mở lên trên nút
   const pos =
-    side === "left" ? "right-full top-1/2 mr-2 -translate-y-1/2" : side === "right" ? "left-full top-1/2 ml-2 -translate-y-1/2" : "bottom-full right-0 mb-2";
+    side === "left"
+      ? "right-full top-1/2 mr-2 -translate-y-1/2"
+      : side === "right"
+        ? "left-full top-1/2 ml-2 -translate-y-1/2"
+        : "bottom-full right-0 mb-2";
   return (
     <>
       <div className="fixed inset-0 z-20" onPointerDown={onClose} />
-      <div className={`absolute z-30 w-60 rounded-2xl border border-white/15 bg-[#11132a]/95 p-3 text-white shadow-2xl backdrop-blur-md ${pos}`}>{children}</div>
+      <div
+        className={`absolute z-30 w-60 rounded-2xl border border-white/15 bg-[#11132a]/95 p-3 text-white shadow-2xl backdrop-blur-md ${pos}`}
+      >
+        {children}
+      </div>
     </>
   );
 }
@@ -77,6 +136,8 @@ export interface ShotHudProps {
   toolsLayoutMobile?: "bottom" | "side";
   /** Cảnh báo (vd. cơ vướng băng) */
   notice?: ReactNode;
+  /** true: xếp cụm công cụ ngay PHÍA TRÊN bi cái nhỏ (cột dọc ở góc thuận tay) thay vì nằm cạnh */
+  toolsAbove?: boolean;
 }
 
 /**
@@ -86,7 +147,22 @@ export interface ShotHudProps {
  *  - Space giữ để lấy lực / thả để đánh, Esc huỷ, ←/→ chỉnh ngắm.
  * Tôn trọng safe area. Không có nút "Đánh".
  */
-export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, onTip, limits, ballColor, onAimNudge, tools, notice, toolsLayoutMobile = "bottom" }: ShotHudProps) {
+export default function ShotHud({
+  shot,
+  enabled,
+  settings,
+  power,
+  tipX,
+  tipY,
+  onTip,
+  limits,
+  ballColor,
+  onAimNudge,
+  tools,
+  notice,
+  toolsLayoutMobile = "bottom",
+  toolsAbove = false,
+}: ShotHudProps) {
   const [origin, setOrigin] = useState<DOMRect | null>(null);
   const lefty = settings.hand === "left";
   const api = useRef({ shot, onAimNudge, settings });
@@ -115,7 +191,9 @@ export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, on
       }
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         const fine = e.shiftKey ? 0.05 : 0.5;
-        a.onAimNudge((e.key === "ArrowLeft" ? fine : -fine) * a.settings.aimSensitivity);
+        a.onAimNudge(
+          (e.key === "ArrowLeft" ? fine : -fine) * a.settings.aimSensitivity,
+        );
         e.preventDefault();
         return;
       }
@@ -161,9 +239,20 @@ export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, on
   const locked = !enabled;
   const sideTools = toolsLayoutMobile === "side";
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 select-none" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
+    <div
+      className="pointer-events-none absolute inset-0 z-10 select-none"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+      }}
+    >
       {/* Thanh kéo cơ: cạnh đối diện tay thuận, cao ~60% khung */}
-      <div className={`pointer-events-auto absolute top-[10%] ${lefty ? "right-2" : "left-2"}`} style={{ height: "clamp(170px, 60%, 540px)" }}>
+      <div
+        className={`pointer-events-auto absolute top-[10%] ${lefty ? "right-2" : "left-2"}`}
+        style={{ height: "clamp(170px, 60%, 540px)" }}
+      >
         <PowerPull
           power={power}
           disabled={locked || shot.spinOpen}
@@ -175,14 +264,20 @@ export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, on
         />
       </div>
 
-      {notice && <div className="pointer-events-auto absolute inset-x-0 bottom-[84px] flex justify-center px-3">{notice}</div>}
+      {notice && (
+        <div className="pointer-events-auto absolute inset-x-0 bottom-[84px] left-1/2 -translate-x-1/2 w-fit">
+          {notice}
+        </div>
+      )}
 
       {/* Đáy: công cụ nhỏ + bi cái nhỏ ở góc thuận tay */}
       <div
         className={`absolute bottom-2 flex gap-2 [@media(max-height:500px)]:bottom-1 ${
-          sideTools
-            ? `max-md:flex-col-reverse max-md:gap-5 [@media(max-height:500px)]:flex-col-reverse [@media(max-height:500px)]:gap-5 ${lefty ? "left-2 items-start" : "right-2 items-end"} md:items-end ${lefty ? "md:flex-row" : "md:flex-row-reverse"}`
-            : `items-end ${lefty ? "left-2 flex-row" : "right-2 flex-row-reverse"}`
+          toolsAbove
+            ? `flex-col-reverse ${lefty ? "left-2 items-start" : "right-2 items-end"}`
+            : sideTools
+              ? `max-md:flex-col-reverse max-md:gap-5 [@media(max-height:500px)]:flex-col-reverse [@media(max-height:500px)]:gap-5 ${lefty ? "left-2 items-start" : "right-2 items-end"} md:items-end ${lefty ? "md:flex-row" : "md:flex-row-reverse"}`
+              : `items-end ${lefty ? "left-2 flex-row" : "right-2 flex-row-reverse"}`
         }`}
       >
         <div className="pointer-events-auto relative">
@@ -199,9 +294,11 @@ export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, on
         </div>
         <div
           className={`pointer-events-auto relative flex gap-1.5 ${
-            sideTools
-              ? `max-md:flex-col [@media(max-height:500px)]:flex-col ${lefty ? "items-start" : "items-end"} md:max-w-[calc(100vw-9rem)] md:flex-row md:flex-wrap md:items-end ${lefty ? "" : "md:justify-end"}`
-              : `max-w-[calc(100vw-9rem)] flex-wrap items-end ${lefty ? "" : "justify-end"}`
+            toolsAbove
+              ? `flex-col ${lefty ? "items-start" : "items-end"}`
+              : sideTools
+                ? `max-md:flex-col [@media(max-height:500px)]:flex-col ${lefty ? "items-start" : "items-end"} md:max-w-[calc(100vw-9rem)] md:flex-row md:flex-wrap md:items-end ${lefty ? "" : "md:justify-end"}`
+                : `max-w-[calc(100vw-9rem)] flex-wrap items-end ${lefty ? "" : "justify-end"}`
           }`}
         >
           {tools}
@@ -210,7 +307,16 @@ export default function ShotHud({ shot, enabled, settings, power, tipX, tipY, on
 
       {shot.spinOpen && (
         <div className="pointer-events-auto">
-          <SpinModal tipX={tipX} tipY={tipY} limits={limits} color={ballColor} origin={origin} haptics={settings.haptics} onChange={onTip} onClose={shot.closeSpin} />
+          <SpinModal
+            tipX={tipX}
+            tipY={tipY}
+            limits={limits}
+            color={ballColor}
+            origin={origin}
+            haptics={settings.haptics}
+            onChange={onTip}
+            onClose={shot.closeSpin}
+          />
         </div>
       )}
     </div>

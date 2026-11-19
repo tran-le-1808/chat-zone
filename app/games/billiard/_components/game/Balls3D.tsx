@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { DEFAULT_PHYSICS as C } from "../../_lib/physics";
 import { BALL_COLORS } from "../../_lib/types";
 import { useBilliard } from "../../_context/BilliardGameContext";
+import type { BallSample } from "../../_lib/playback";
 
 const R = C.ballRadius;
 
@@ -41,6 +42,11 @@ const DOT_COLORS = ["#c9c9c0", "#c9960a", "#9e1b1b"];
  */
 export default function Balls3D({ debug }: { debug: boolean }) {
   const { sampleBalls } = useBilliard();
+  return <BallsView sample={sampleBalls} debug={debug} />;
+}
+
+/** Vẽ 3 bi theo hàm lấy mẫu vị trí (trận đấu: quỹ đạo server; AI Shot Studio: quỹ đạo mô phỏng đã xác minh) */
+export function BallsView({ sample: sampleBalls, debug = false }: { sample: () => BallSample[]; debug?: boolean }) {
   const refs = useRef<(THREE.Mesh | null)[]>([]);
   const vArrows = useRef<(THREE.ArrowHelper | null)[]>([]);
   const wArrows = useRef<(THREE.ArrowHelper | null)[]>([]);

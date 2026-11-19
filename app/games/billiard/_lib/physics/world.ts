@@ -62,10 +62,10 @@ export class PhysicsWorld {
   private readonly railContact = new Set<string>();
   private readonly ballContact = new Set<string>();
 
-  constructor(
-    positions: BallPositions,
-    readonly config: PhysicsConfig = DEFAULT_PHYSICS,
-  ) {
+  readonly config: PhysicsConfig;
+
+  constructor(positions: BallPositions, config: PhysicsConfig = DEFAULT_PHYSICS) {
+    this.config = config;
     this.balls = makeBalls(positions);
   }
 

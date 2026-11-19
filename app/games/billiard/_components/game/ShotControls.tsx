@@ -1,13 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp } from "lucide-react";
 import { useBilliard } from "../../_context/BilliardGameContext";
 import { BALL_COLORS } from "../../_lib/types";
 import { DEFAULT_PHYSICS } from "../../_lib/physics";
 import ShotHud, { ToolButton, ToolPopover } from "../../../_shared/shot/ShotHud";
-import VoiceControls from "../../../monopoly/_components/VoiceControls";
 import ElevationControl from "./ElevationControl";
+
+/** Icon cây cơ bida chúc lên — nghiêng đúng theo góc nâng cơ hiện tại (0° nằm ngang, 90° dựng đứng) */
+function CueTiltIcon({ deg }: { deg: number }) {
+  const a = (Math.max(8, Math.min(85, deg)) * Math.PI) / 180;
+  // đầu cơ chạm sát bi ở góc dưới phải, đuôi cơ chúc lên phía trên trái theo góc nâng
+  const tip = { x: 17, y: 18 };
+  const len = 17;
+  const butt = { x: tip.x - Math.cos(a) * len, y: tip.y - Math.sin(a) * len };
+  return (
+    <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden>
+      <circle cx={20} cy={20.5} r={2.8} fill="#ffffff" />
+      <line x1={butt.x} y1={butt.y} x2={tip.x} y2={tip.y} stroke="#f5c77e" strokeWidth={2.6} strokeLinecap="round" />
+      <line x1={butt.x} y1={butt.y} x2={butt.x + (tip.x - butt.x) * 0.35} y2={butt.y + (tip.y - butt.y) * 0.35} stroke="#c0803c" strokeWidth={3.2} strokeLinecap="round" />
+      <line x1={tip.x - Math.cos(a) * 1.6} y1={tip.y - Math.sin(a) * 1.6} x2={tip.x} y2={tip.y} stroke="#7dd3fc" strokeWidth={2.6} strokeLinecap="round" />
+    </svg>
+  );
+}
 
 /** Dòng gợi ý trạng thái: hiển thị trên thanh trên (header) để không phủ lên bàn */
 export function useCaromStatus(): string {
@@ -21,7 +36,7 @@ export function useCaromStatus(): string {
         : shooting
           ? "Đang gửi cú đánh..."
           : !isMyTurn
-            ? "Đang chờ đối thủ đánh"
+            ? "" // lượt đối thủ: chỉ còn thanh thời gian, không hiện chữ chờ
             : !canShoot
               ? "Chờ bi dừng hẳn..."
               : "Chạm bàn để ngắm · kéo cơ để đánh";
@@ -53,15 +68,14 @@ export default function ShotControls() {
   const tools = (
     <>
       <div className="relative">
-        <ToolButton label="Góc nâng cơ" active={elevOpen} disabled={!canShoot} onClick={() => setElevOpen((v) => !v)}>
-          <TrendingUp className="h-5 w-5" />
+        <ToolButton label="Góc nâng cơ" bright active={elevOpen} disabled={!canShoot} onClick={() => setElevOpen((v) => !v)}>
+          <CueTiltIcon deg={aim.elevation} />
           <span className="tabular-nums">{aim.elevation.toFixed(aim.elevation % 1 ? 1 : 0)}°</span>
         </ToolButton>
-        <ToolPopover open={elevOpen} onClose={() => setElevOpen(false)}>
+        <ToolPopover open={elevOpen} onClose={() => setElevOpen(false)} side="center" title="Góc nâng cơ">
           <ElevationControl value={aim.elevation} disabled={!canShoot} ballColor={cueColor} onChange={(elevation) => setAim({ elevation })} />
         </ToolPopover>
       </div>
-      <VoiceControls variant="stack" />
     </>
   );
 
@@ -79,6 +93,7 @@ export default function ShotControls() {
       ballColor={cueColor}
       onAimNudge={rotateAim}
       tools={tools}
+      toolsAbove
       notice={notice}
     />
   );

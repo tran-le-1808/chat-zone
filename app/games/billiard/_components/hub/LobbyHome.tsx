@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Crown, Flame, History, Loader2, Medal, Swords, Trophy, Users, Zap } from "lucide-react";
+import { Clapperboard, Crown, Flame, History, Loader2, Medal, Swords, Trophy, Users, Zap } from "lucide-react";
 import PlayerAvatar from "../../../monopoly/_components/PlayerAvatar";
 import { useLobby } from "../../_context/BilliardLobbyContext";
 import { bidaEmit } from "../../_lib/lobbyApi";
@@ -255,6 +255,14 @@ function GameModes() {
           stat={summary ? `${summary.tournamentsOpen} giải đang mở · ${summary.tournamentsLive} giải đang đấu` : undefined}
           onClick={() => router.push("/games/billiard/tournaments")}
           cta="Xem giải đấu"
+        />
+        <ModeCard
+          title="AI SHOT STUDIO"
+          desc="AI tìm cú đánh Libre đẹp, tự đánh, quay video có chú thích đường bi và thuyết minh tiếng Việt."
+          icon={<Clapperboard className="h-6 w-6" />}
+          accent="bg-violet-600"
+          onClick={() => router.push("/games/billiard/studio")}
+          cta="Mở studio"
         />
       </div>
       <QuickMatchModal open={quick} onClose={() => setQuick(false)} />

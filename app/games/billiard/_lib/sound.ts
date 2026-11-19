@@ -35,7 +35,7 @@ class BilliardSound {
       this.master = this.ctx.createGain();
       this.master.connect(this.ctx.destination);
     }
-    if (this.master) this.master.gain.value = this.volume;
+    if (this.master) this.master.gain.value = this.volume * this.duckFactor;
     if (this.ctx.state === "suspended") void this.ctx.resume().catch(() => {});
     return this.ctx;
   }
@@ -43,6 +43,42 @@ class BilliardSound {
   /** Gọi trong thao tác người dùng (bấm nút) để trình duyệt cho phép phát âm thanh */
   unlock() {
     this.ensure();
+  }
+
+  private capture: MediaStreamAudioDestinationNode | null = null;
+  private duckFactor = 1;
+
+  /**
+   * Luồng âm thanh của game để ghép vào video (AI Shot Studio). Âm vẫn phát ra loa như thường.
+   * Trả về null nếu trình duyệt không hỗ trợ.
+   */
+  captureStream(): MediaStream | null {
+    const ctx = this.ensure();
+    if (!ctx || !this.master || typeof ctx.createMediaStreamDestination !== "function") return null;
+    if (!this.capture) {
+      this.capture = ctx.createMediaStreamDestination();
+      this.master.connect(this.capture);
+    }
+    return this.capture.stream;
+  }
+
+  /** Ngắt luồng ghi (giải phóng node) */
+  releaseCapture() {
+    if (this.capture && this.master) {
+      try {
+        this.master.disconnect(this.capture);
+      } catch {
+        /* đã ngắt */
+      }
+    }
+    this.capture = null;
+  }
+
+  /** Giảm âm game khi đang thuyết minh (1 = bình thường) */
+  duck(factor: number) {
+    this.duckFactor = Math.max(0, Math.min(1, factor));
+    const ctx = this.ctx;
+    if (ctx && this.master) this.master.gain.setTargetAtTime(this.volume * this.duckFactor, ctx.currentTime, 0.08);
   }
 
   setVolume(v: number) {
