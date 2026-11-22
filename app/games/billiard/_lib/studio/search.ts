@@ -402,6 +402,7 @@ export async function searchShots(start: BallPositions, cue: BallId, opts: Searc
     const breakdown = scoreBreakdown(p.shot, p.a, rep);
     cands.push({
       id: `${opts.category.toLowerCase()}-${opts.seed}-${idx++}`,
+      category: opts.category,
       shot: p.shot,
       analysis: p.a,
       meetsGoal: true,

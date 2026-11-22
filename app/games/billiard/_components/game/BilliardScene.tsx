@@ -144,7 +144,8 @@ function AimInput({ table }: { table: CaromTableConfig }) {
   );
 }
 
-export default function BilliardScene() {
+/** `extra`: phần tử 3D thêm vào cảnh (vd. công cụ kéo thả bi khi tự luyện) */
+export default function BilliardScene({ extra }: { extra?: React.ReactNode } = {}) {
   const { prefs, match } = useBilliard();
   const isCompact = useIsCompact();
   // Phăng chơi trên bàn Libre, 3 băng trên bàn 3 băng (cùng mặt thi đấu 2.84 × 1.42 m)
@@ -184,6 +185,7 @@ export default function BilliardScene() {
       <Balls3D debug={prefs.debug} />
       <AimLayer />
       <AimInput table={table} />
+      {extra}
       <OrbitControls
         makeDefault
         enablePan={false}

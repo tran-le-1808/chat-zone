@@ -50,3 +50,8 @@ export function sceneAt(scenes: SceneSpec[], t: number): SceneSpec | null {
 export function totalDuration(scenes: SceneSpec[]): number {
   return scenes.length ? scenes[scenes.length - 1].end : 0;
 }
+
+/** Dời toàn bộ cảnh của một cú đi `offset` giây (để nối nhiều cú thành một video) */
+export function shiftScenes(scenes: SceneSpec[], offset: number): SceneSpec[] {
+  return scenes.map((s) => ({ ...s, start: s.start + offset, end: s.end + offset }));
+}

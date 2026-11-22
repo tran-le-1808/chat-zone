@@ -69,6 +69,8 @@ export interface ScoreBreakdown {
 
 export interface ShotCandidate {
   id: string;
+  /** Loại cú đã tìm (để ghép nhiều cú vào một video) */
+  category?: ShotScenarioCategory;
   shot: ShotCommand;
   analysis: ShotAnalysis;
   /** Đạt mục tiêu kịch bản (ghi điểm + đúng kỹ thuật yêu cầu) */

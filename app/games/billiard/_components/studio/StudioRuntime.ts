@@ -1,28 +1,37 @@
 /**
- * Bộ chạy video của AI Shot Studio (không phải React state): giữ đồng hồ, cảnh hiện tại, phát âm va chạm
+ * Bộ chạy video của AI Shot Studio (không phải React state): giữ đồng hồ, cảnh & cú đánh hiện tại, phát âm va chạm
  * đúng thời điểm physics, đọc thuyết minh theo mốc, giảm âm game khi đang nói, báo tiến độ / kết thúc.
+ * Một video có thể gồm nhiều cú đánh nối tiếp (mỗi cú là một "part", thời gian tính trên toàn video).
  * Tách khỏi trận đấu thật: chỉ đọc dữ liệu cú đánh đã mô phỏng, không gửi gì lên server.
  */
 import { billiardSound } from "../../_lib/sound";
 import { restSamples, type BallSample } from "../../_lib/playback";
 import type { BallPositions, ShotCommand } from "../../_lib/physics";
-import { eventsBetween, frameAt, totalDuration, type DirectorFrame, type NarrationSegment, type SceneSpec, type ShotAnalysis, type VideoMode } from "../../_lib/studio";
+import { eventsBetween, frameAt, type DirectorFrame, type NarrationSegment, type SceneSpec, type ShotAnalysis, type VideoMode } from "../../_lib/studio";
 import { speak, stopSpeaking } from "../../_lib/studio/tts";
 
 export type CameraMode = "top" | "angle" | "cinematic";
 
-export interface StudioJob {
+/** Một cú đánh trong video. scenes/segments dùng thời gian của TOÀN video. */
+export interface StudioPart {
   scenes: SceneSpec[];
   predicted: ShotAnalysis;
   actual: ShotAnalysis;
   shot: ShotCommand;
   segments: NarrationSegment[];
-  title: string;
   subtitle: string;
   difficulty: string;
   tags: string[];
   techniqueLabels: string[];
   mismatch: string | null;
+  /** Khoảng thời gian của cú này trên toàn video */
+  start: number;
+  end: number;
+}
+
+export interface StudioJob {
+  parts: StudioPart[];
+  title: string;
   mode: VideoMode;
   annotate: boolean;
   captions: boolean;
@@ -33,22 +42,34 @@ export interface StudioJob {
 
 export class StudioRuntime {
   job: StudioJob | null = null;
+  /** Cú đánh đang hiển thị */
+  part: StudioPart | null = null;
   idle: BallPositions = [];
   frame: DirectorFrame | null = null;
   private t0 = 0;
   private pausedAt: number | null = null;
   private lastPhys = -1;
   private lastScene: string | null = null;
-  private spoken = new Set<number>();
+  private total = 0;
+  private spoken = new WeakSet<NarrationSegment>();
   private speakingUntil = 0;
+  /** Số khung đã vẽ + đẩy vào video kể từ setPacing (để báo fps thực tế sau khi quay) */
+  framesDrawn = 0;
   /** Nhịp vẽ tối đa (khung/giây): ghi hình = fps đã chọn; xem trước = 60 (kể cả màn 120 Hz) */
   private targetFps = 60;
   private nextDraw = 0;
   private frameSink: (() => void) | null = null;
-  /** Số khung đã vẽ + đẩy vào video kể từ setPacing (để báo fps thực tế sau khi quay) */
-  framesDrawn = 0;
   onProgress: ((t: number, total: number, scene: string) => void) | null = null;
   onDone: (() => void) | null = null;
+
+  setIdle(pos: BallPositions): void {
+    this.idle = pos;
+  }
+
+  setHandlers(onProgress: StudioRuntime["onProgress"], onDone: StudioRuntime["onDone"]): void {
+    this.onProgress = onProgress;
+    this.onDone = onDone;
+  }
 
   setPacing(fps: number, sink: (() => void) | null): void {
     this.targetFps = fps;
@@ -76,15 +97,6 @@ export class StudioRuntime {
     this.frameSink?.();
   }
 
-  setIdle(pos: BallPositions): void {
-    this.idle = pos;
-  }
-
-  setHandlers(onProgress: StudioRuntime["onProgress"], onDone: StudioRuntime["onDone"]): void {
-    this.onProgress = onProgress;
-    this.onDone = onDone;
-  }
-
   get playing(): boolean {
     return !!this.job;
   }
@@ -96,11 +108,13 @@ export class StudioRuntime {
   play(job: StudioJob): void {
     this.stop();
     this.job = job;
+    this.total = job.parts.length ? job.parts[job.parts.length - 1].end : 0;
     this.t0 = performance.now();
     this.pausedAt = null;
     this.lastPhys = -1;
     this.lastScene = null;
-    this.spoken.clear();
+    this.part = null;
+    this.spoken = new WeakSet();
     billiardSound.unlock();
   }
 
@@ -117,6 +131,7 @@ export class StudioRuntime {
 
   stop(): void {
     this.job = null;
+    this.part = null;
     this.frame = null;
     this.pausedAt = null;
     this.frameSink = null;
@@ -134,9 +149,14 @@ export class StudioRuntime {
   update(ms: number): void {
     const job = this.job;
     if (!job) return;
-    const total = totalDuration(job.scenes);
+    const total = this.total;
     const t = Math.min(this.now(ms), total);
-    const f = frameAt(job.scenes, job.actual, t);
+    const part = job.parts.find((p) => t >= p.start && t < p.end) ?? job.parts[job.parts.length - 1];
+    if (part !== this.part) {
+      this.part = part;
+      this.lastPhys = -1;
+    }
+    const f = frameAt(part.scenes, part.actual, t);
     this.frame = f;
     const sceneId = f.scene?.id ?? "";
     // âm thanh va chạm theo đúng thời điểm physics (cả lúc quay chậm)
@@ -144,7 +164,7 @@ export class StudioRuntime {
     this.lastScene = sceneId;
     if (job.gameAudio && f.physicsT !== null && this.pausedAt === null) {
       const slow = sceneId === "replay";
-      for (const e of eventsBetween(job.actual.events, this.lastPhys, f.physicsT)) {
+      for (const e of eventsBetween(part.actual.events, this.lastPhys, f.physicsT)) {
         const k = Math.min(1, e.speed / 3);
         billiardSound.play(e.type, (e.type === "cue" ? k + 0.2 : k) * (slow ? 0.6 : 1));
       }
@@ -152,13 +172,13 @@ export class StudioRuntime {
     }
     // thuyết minh
     if (job.voice.enabled && this.pausedAt === null) {
-      job.segments.forEach((s, i) => {
-        if (this.spoken.has(i) || t < s.start || t > s.end) return;
-        this.spoken.add(i);
+      for (const s of part.segments) {
+        if (this.spoken.has(s) || t < s.start || t > s.end) continue;
+        this.spoken.add(s);
         if (job.voice.duck) billiardSound.duck(0.35);
         this.speakingUntil = s.end;
         void speak(s.text, { voice: job.voice.voice, rate: job.voice.rate });
-      });
+      }
       if (job.voice.duck && t > this.speakingUntil) billiardSound.duck(1);
     }
     this.onProgress?.(t, total, sceneId);

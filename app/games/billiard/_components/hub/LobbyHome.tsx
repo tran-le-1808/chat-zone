@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clapperboard, Crown, Flame, History, Loader2, Medal, Swords, Trophy, Users, Zap } from "lucide-react";
+import { Bot, Clapperboard, Crown, Flame, History, Loader2, Medal, Swords, Trophy, Users, Zap } from "lucide-react";
 import PlayerAvatar from "../../../monopoly/_components/PlayerAvatar";
 import { useLobby } from "../../_context/BilliardLobbyContext";
 import { bidaEmit } from "../../_lib/lobbyApi";
@@ -255,6 +255,14 @@ function GameModes() {
           stat={summary ? `${summary.tournamentsOpen} giải đang mở · ${summary.tournamentsLive} giải đang đấu` : undefined}
           onClick={() => router.push("/games/billiard/tournaments")}
           cta="Xem giải đấu"
+        />
+        <ModeCard
+          title="LUYỆN TẬP / ĐẤU BOT"
+          desc="Tự luyện với bi đặt tuỳ ý, đánh lại cú vừa rồi, hoặc đấu với bot 3 cấp độ. Không tính Rating."
+          icon={<Bot className="h-6 w-6" />}
+          accent="bg-teal-600"
+          onClick={() => router.push("/games/billiard/practice")}
+          cta="Vào luyện tập"
         />
         <ModeCard
           title="AI SHOT STUDIO"

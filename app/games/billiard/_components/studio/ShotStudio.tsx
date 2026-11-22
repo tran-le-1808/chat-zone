@@ -20,6 +20,7 @@ import {
   randomLayout,
   SCENARIO_BY_ID,
   scenariosFor,
+  shiftScenes,
   searchShots,
   techniqueLabels,
   toSRT,
@@ -28,6 +29,7 @@ import {
   validateSetup,
   type SearchResult,
   type SearchStage,
+  type NarrationSegment,
   type ShotCandidate,
   type ShotDifficulty,
   type ShotScenario,
@@ -39,7 +41,7 @@ import {
 import { extensionOf, recordingSupport, verifyPlayable, VideoRecorder } from "../../_lib/studio/recorder";
 import { loadVoices, stopSpeaking, ttsAvailable } from "../../_lib/studio/tts";
 import StudioStage, { type Aspect, type StageHandle } from "./StudioStage";
-import { StudioRuntime, type CameraMode, type StudioJob } from "./StudioRuntime";
+import { StudioRuntime, type CameraMode, type StudioJob, type StudioPart } from "./StudioRuntime";
 
 const CATEGORIES = Object.keys(CATEGORY_INFO) as ShotScenarioCategory[];
 const DIFFS: { id: ShotDifficulty; name: string }[] = [
@@ -109,7 +111,7 @@ const DEFAULTS: Settings = {
   count: 6,
   seed: 7,
   mode: "CINEMATIC",
-  aspect: "16:9",
+  aspect: "9:16",
   resolution: 720,
   fps: 30,
   quality: "standard",
@@ -128,6 +130,8 @@ const DEFAULTS: Settings = {
 };
 
 interface ExportInfo {
+  /** Thuyết minh của toàn bộ video đã quay (để xuất phụ đề đúng cho cả video) */
+  segments: NarrationSegment[];
   url: string;
   ext: string;
   mime: string;
@@ -169,6 +173,10 @@ export default function ShotStudio() {
   const recorder = useRef<VideoRecorder | null>(null);
   const [progress, setProgress] = useState<{ stage: SearchStage; done: number; total: number; valid: number } | null>(null);
   const [result, setResult] = useState<SearchResult | null>(null);
+  /** Kho ứng viên đã xác minh, gom từ nhiều lần tìm (mỗi loại cú một lần) */
+  const [pool, setPool] = useState<ShotCandidate[]>([]);
+  /** Các cú được chọn để ghép vào một video (theo thứ tự trong kho) */
+  const [picks, setPicks] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [run, setRun] = useState<{ kind: "preview" | "record"; t: number; total: number; scene: string; paused: boolean } | null>(null);
   const [step, setStep] = useState<string | null>(null);
@@ -182,9 +190,10 @@ export default function ShotStudio() {
 
   const template = s.scenarioId === "random" ? null : SCENARIO_BY_ID[s.scenarioId];
   const positions: BallPositions = useMemo(() => (template ? template.positions : randomLayout(s.seed)), [template, s.seed]);
-  const category = template ? template.category : s.category;
+  const category = s.category;
   const title = template ? template.title : `Khám phá: ${CATEGORY_INFO[category].name}`;
-  const candidate = result?.candidates.find((c) => c.id === selected) ?? null;
+  const candidate = pool.find((c) => c.id === selected) ?? null;
+  const recordList = picks.length ? pool.filter((c) => picks.includes(c.id)) : candidate ? [candidate] : [];
   const voice = voices.find((v) => v.name === s.voiceName) ?? voices[0] ?? null;
 
   useEffect(() => {
@@ -217,7 +226,6 @@ export default function ShotStudio() {
     setLastAction("search");
     setError(null);
     setResult(null);
-    setSelected(null);
     abort.current?.abort();
     const ctl = new AbortController();
     abort.current = ctl;
@@ -249,6 +257,7 @@ export default function ShotStudio() {
       return;
     }
     setResult(r);
+    setPool((prev) => [...prev, ...r.candidates]);
     if (!r.candidates.length) {
       setError(`Không tìm được cú đánh đạt mục tiêu «${CATEGORY_INFO[category].goal}» sau ${r.evaluated} lần mô phỏng${r.timedOut ? " (hết thời gian)" : ""}. Hãy đổi seed, độ khó hoặc loại cú khác.`);
       return;
@@ -269,7 +278,8 @@ export default function ShotStudio() {
 
   // ---------------------------------------------------------------- AI tự đánh + quay
   const execute = useCallback(
-    async (c: ShotCandidate, kind: "preview" | "record") => {
+    async (list: ShotCandidate[], kind: "preview" | "record") => {
+      if (!list.length) return setError("Chưa chọn cú đánh nào");
       setLastAction(kind);
       setError(null);
       if (runtime.playing) runtime.stop();
@@ -277,30 +287,42 @@ export default function ShotStudio() {
       setStep("Đặt bi theo kịch bản");
       const setupErr = validateSetup(positions);
       if (setupErr) return setError(`Không đặt được bi: ${setupErr}`);
-      // 2. ngắm + cấu hình lực / spin — kiểm tra như server
-      setStep("Ngắm & chỉnh lực, điểm chạm");
-      const bad = validateShotInput(c.shot);
-      if (bad) return setError(`Lệnh đánh không hợp lệ: ${bad}`);
-      // 3. đánh: chạy physics engine của game từ thế bi
-      setStep("Thực hiện cú đánh (physics)");
-      const actual = analyzeShot(positions, c.shot);
-      // 4. đối chiếu với kết quả lúc tìm kiếm
-      const cmp = compareOutcome(c.analysis, actual);
-      const scenes = buildSequence({ mode: s.mode, shotDuration: actual.duration, replay: s.replay });
-      setStep("Sinh thuyết minh từ kết quả thật");
-      const narration = buildNarration({ title, category, shot: c.shot, analysis: actual, scenes, style: s.voiceStyle, rate: s.voiceRate, detail: s.detail });
+      // 2–4. từng cú: kiểm tra lệnh đánh như server, chạy physics, đối chiếu với lúc tìm, dựng cảnh & thuyết minh
+      const parts: StudioPart[] = [];
+      let offset = 0;
+      for (const [i, c] of list.entries()) {
+        setStep(`Thực hiện cú ${i + 1}/${list.length} (physics)`);
+        const bad = validateShotInput(c.shot);
+        if (bad) return setError(`Lệnh đánh không hợp lệ: ${bad}`);
+        const actual = analyzeShot(positions, c.shot);
+        const cmp = compareOutcome(c.analysis, actual);
+        const cat = c.category ?? category;
+        // cú đầu có cảnh mở đầu; các cú sau nối tiếp, bỏ tiêu đề
+        const local = buildSequence({ mode: s.mode, shotDuration: actual.duration, replay: s.replay, introOutro: i === 0 });
+        setStep("Sinh thuyết minh từ kết quả thật");
+        const narr = buildNarration({ title, category: cat, shot: c.shot, analysis: actual, scenes: local, style: s.voiceStyle, rate: s.voiceRate, detail: s.detail });
+        const end = offset + totalDuration(local);
+        const info = `${CATEGORY_INFO[cat].name} · ${DIFF_VI[c.difficulty]}`;
+        parts.push({
+          scenes: shiftScenes(local, offset),
+          predicted: c.analysis,
+          actual,
+          shot: c.shot,
+          segments: s.mode === "CLEAN" ? [] : narr.segments.map((g) => ({ ...g, start: g.start + offset, end: g.end + offset })),
+          subtitle: list.length > 1 ? `Cách ${i + 1}/${list.length}: ${info}` : info,
+          difficulty: c.difficulty,
+          tags: c.tags,
+          techniqueLabels: techniqueLabels(c.shot, actual),
+          mismatch: cmp.match ? null : cmp.reason ?? "Kết quả lệch dự kiến",
+          start: offset,
+          end,
+        });
+        offset = end;
+      }
+      const total = offset;
       const job: StudioJob = {
-        scenes,
-        predicted: c.analysis,
-        actual,
-        shot: c.shot,
-        segments: s.mode === "CLEAN" ? [] : narration.segments,
+        parts,
         title,
-        subtitle: `${CATEGORY_INFO[category].name} · ${DIFF_VI[c.difficulty]}`,
-        difficulty: c.difficulty,
-        tags: c.tags,
-        techniqueLabels: techniqueLabels(c.shot, actual),
-        mismatch: cmp.match ? null : cmp.reason ?? "Kết quả lệch dự kiến",
         mode: s.mode,
         annotate: s.annotate,
         captions: s.captions && s.mode !== "CLEAN",
@@ -309,7 +331,6 @@ export default function ShotStudio() {
         // giọng đọc chỉ phát khi xem trước; lúc ghi hình thì im lặng (video không tiếng)
         voice: { enabled: kind === "preview" && s.voiceOn && tts && s.mode !== "CLEAN", voice, rate: s.voiceRate, duck: s.duck },
       };
-      const total = totalDuration(scenes);
       if (kind === "record" && s.source === "screen") {
         if (!navigator.mediaDevices?.getDisplayMedia) return setError("Trình duyệt không hỗ trợ ghi màn hình");
         if (exp) {
@@ -373,7 +394,7 @@ export default function ShotStudio() {
             const url = URL.createObjectURL(out.blob);
             setStep("Mở thử file vừa xuất");
             const verified = await verifyPlayable(out.blob);
-            setExp({ url, ext: extensionOf(out.mimeType), mime: out.mimeType, bytes: out.bytes, hasAudio: out.hasAudio, actualFps: s.source === "screen" ? s.fps : runtime.framesDrawn / Math.max(0.1, total), targetFps: s.fps, verified });
+            setExp({ segments: job.parts.flatMap((p) => p.segments), url, ext: extensionOf(out.mimeType), mime: out.mimeType, bytes: out.bytes, hasAudio: out.hasAudio, actualFps: s.source === "screen" ? s.fps : runtime.framesDrawn / Math.max(0.1, total), targetFps: s.fps, verified });
             if (!verified.ok) setError(`File đã tạo nhưng không phát được: ${verified.reason}`);
             setStep(null);
           })
@@ -394,7 +415,7 @@ export default function ShotStudio() {
         setRun((r) => (r ? { ...r, t, total: tot, scene } : r));
       }, onDone);
 
-      setRun({ kind, t: 0, total, scene: scenes[0].id, paused: false });
+      setRun({ kind, t: 0, total, scene: parts[0].scenes[0].id, paused: false });
       runtime.play(job);
       // play() đặt lại nhịp vẽ, nên chỉnh sau khi gọi
       const recNow = recorder.current;
@@ -417,7 +438,7 @@ export default function ShotStudio() {
 
   const retry = () => {
     if (lastAction === "search") void generate();
-    else if (candidate && lastAction) void execute(candidate, lastAction);
+    else if (lastAction) void execute(lastAction === "record" ? recordList : candidate ? [candidate] : [], lastAction);
   };
 
   const narrationPreview = useMemo(() => {
@@ -470,7 +491,8 @@ export default function ShotStudio() {
               <select className={sel} value={category} disabled={busy} onChange={(e) => {
                 const cat = e.target.value as ShotScenarioCategory;
                 const first = scenariosFor(cat)[0];
-                setS((p) => ({ ...p, category: cat, scenarioId: first ? first.id : "random", difficulty: first?.difficulty ?? p.difficulty }));
+                // thế bi khai cuộc giữ nguyên khi đổi loại cú (để tìm nhiều cách đánh từ cùng một thế)
+                setS((p) => (p.scenarioId === "opening-break" ? { ...p, category: cat } : { ...p, category: cat, scenarioId: first ? first.id : "random", difficulty: first?.difficulty ?? p.difficulty }));
               }}>
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>{CATEGORY_INFO[c].name}</option>
@@ -480,6 +502,7 @@ export default function ShotStudio() {
             <div>
               <label className={lbl}>Thế bi</label>
               <select className={sel} value={s.scenarioId} disabled={busy} onChange={(e) => set("scenarioId", e.target.value)}>
+                <option value="opening-break">Thế bi khai cuộc (đổi loại cú để tìm cách đánh khác)</option>
                 {scenariosFor(category).map((t) => (
                   <option key={t.id} value={t.id}>{t.title}</option>
                 ))}
@@ -654,11 +677,11 @@ export default function ShotStudio() {
           <StudioStage ref={stage} runtime={runtime} aspect={s.aspect} outWidth={outputWidth(s.aspect, s.resolution)} camera={s.camera} />
 
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={`${btn} bg-white/10`} disabled={!candidate || busy} onClick={() => candidate && void execute(candidate, "preview")}>
+            <button type="button" className={`${btn} bg-white/10`} disabled={!candidate || busy} onClick={() => candidate && void execute([candidate], "preview")}>
               <Play className="h-4 w-4" /> Xem trước
             </button>
-            <button type="button" className={`${btn} bg-rose-600 text-white`} disabled={!candidate || busy || !support.supported} onClick={() => candidate && void execute(candidate, "record")}>
-              <Video className="h-4 w-4" /> Quay video
+            <button type="button" className={`${btn} bg-rose-600 text-white`} disabled={!recordList.length || busy || !support.supported} onClick={() => recordList.length && void execute(recordList, "record")}>
+              <Video className="h-4 w-4" /> {recordList.length > 1 ? `Quay video (${recordList.length} cú)` : "Quay video"}
             </button>
             {run?.kind === "preview" && (
               <button type="button" className={`${btn} bg-white/10`} onClick={() => {
@@ -740,39 +763,57 @@ export default function ShotStudio() {
                 <a className={`${btn} bg-emerald-500 text-[#04210f]`} href={exp.url} download={`ai-shot-${s.scenarioId}-${s.seed}.${exp.ext}`}>
                   <Download className="h-4 w-4" /> Tải video
                 </a>
-                {narrationPreview && (
+                {exp.segments.length > 0 && (
                   <>
-                    <button type="button" className={`${btn} bg-white/10`} onClick={() => downloadText(`ai-shot-${s.scenarioId}.vtt`, toWebVTT(narrationPreview.segments), "text/vtt")}>Phụ đề .vtt</button>
-                    <button type="button" className={`${btn} bg-white/10`} onClick={() => downloadText(`ai-shot-${s.scenarioId}.srt`, toSRT(narrationPreview.segments))}>Phụ đề .srt</button>
+                    <button type="button" className={`${btn} bg-white/10`} onClick={() => downloadText(`ai-shot-${s.scenarioId}.vtt`, toWebVTT(exp.segments), "text/vtt")}>Phụ đề .vtt</button>
+                    <button type="button" className={`${btn} bg-white/10`} onClick={() => downloadText(`ai-shot-${s.scenarioId}.srt`, toSRT(exp.segments))}>Phụ đề .srt</button>
                   </>
                 )}
               </div>
             </section>
           )}
 
-          {/* ------------------------------------------------ bộ sưu tập ứng viên */}
-          {result && result.candidates.length > 0 && (
+          {/* ------------------------------------------------ kho ứng viên đã xác minh */}
+          {pool.length > 0 && (
             <section className="rounded-2xl border border-white/10 bg-[#11132a] p-3">
-              <h2 className="mb-2 text-xs font-black text-[#ffd166]">
-                Ứng viên đã xác minh · {result.valid}/{result.evaluated} cú đạt mục tiêu · {(result.elapsedMs / 1000).toFixed(1)} s
-              </h2>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <h2 className="mr-auto text-xs font-black text-[#ffd166]">
+                  Ứng viên đã xác minh · {pool.length} cú
+                  {result ? ` · lần tìm gần nhất: ${result.valid}/${result.evaluated} đạt mục tiêu` : ""}
+                </h2>
+                <span className="text-[11px] text-slate-400">Chọn «Thêm vào video» để ghép nhiều cú (theo thứ tự bên dưới)</span>
+                <button type="button" disabled={busy} className="rounded-lg bg-white/10 px-2 py-1 text-[11px]" onClick={() => {
+                  setPool([]);
+                  setPicks([]);
+                  setSelected(null);
+                  setResult(null);
+                }}>Xoá kho</button>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {result.candidates.map((c, i) => (
-                  <button key={c.id} type="button" disabled={busy} onClick={() => setSelected(c.id)} className={`rounded-xl border p-2 text-left text-xs transition ${selected === c.id ? "border-[#ffd166] bg-[#ffd166]/10" : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"}`}>
-                    <Thumb c={c} start={positions} />
-                    <p className="mt-1.5 font-extrabold">
-                      #{i + 1} · {DIFF_VI[c.difficulty]} · điểm {(c.total * 100).toFixed(0)}
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      ✔ đã mô phỏng · {c.analysis.duration.toFixed(1)} s · ổn định {(c.breakdown.repeatability * 100).toFixed(0)}%
-                    </p>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {c.tags.map((t) => (
-                        <span key={t} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px]">{t}</span>
-                      ))}
+                {pool.map((c, i) => {
+                  const picked = picks.includes(c.id);
+                  return (
+                    <div key={c.id} className="flex flex-col gap-1">
+                      <button type="button" disabled={busy} onClick={() => setSelected(c.id)} className={`rounded-xl border p-2 text-left text-xs transition ${selected === c.id ? "border-[#ffd166] bg-[#ffd166]/10" : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"}`}>
+                        <Thumb c={c} start={positions} />
+                        <p className="mt-1.5 font-extrabold">
+                          #{i + 1} · {c.category ? CATEGORY_INFO[c.category].name : ""} · {DIFF_VI[c.difficulty]} · điểm {(c.total * 100).toFixed(0)}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          ✔ đã mô phỏng · {c.analysis.duration.toFixed(1)} s · ổn định {(c.breakdown.repeatability * 100).toFixed(0)}%
+                        </p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {c.tags.map((t) => (
+                            <span key={t} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px]">{t}</span>
+                          ))}
+                        </div>
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => setPicks((p) => (p.includes(c.id) ? p.filter((x) => x !== c.id) : [...p, c.id]))} className={`rounded-lg px-2 py-1 text-[11px] font-bold ${picked ? "bg-emerald-500/25 text-emerald-200" : "bg-white/10 text-slate-200"}`}>
+                        {picked ? `✓ Trong video (cú ${picks.indexOf(c.id) + 1})` : "+ Thêm vào video"}
+                      </button>
                     </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}

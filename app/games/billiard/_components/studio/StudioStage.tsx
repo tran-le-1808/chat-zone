@@ -88,8 +88,9 @@ function Director({ runtime, composite, aspect, camera, idleCamera }: { runtime:
     const H = out.height;
     ctx.drawImage(gl.domElement, 0, 0, W, H);
     const job = runtime.job;
+    const part = runtime.part;
     const f = runtime.frame;
-    if (!job || !f) return;
+    if (!job || !part || !f) return;
     cam.updateMatrixWorld();
     const project = (x: number, y: number) => {
       v.set(x, R, -y).project(cam);
@@ -102,19 +103,19 @@ function Director({ runtime, composite, aspect, camera, idleCamera }: { runtime:
       H,
       project,
       frame: f,
-      predicted: job.predicted,
-      actual: job.actual,
-      shot: job.shot,
+      predicted: part.predicted,
+      actual: part.actual,
+      shot: part.shot,
       mode: job.mode,
       annotate: job.annotate,
       captions: job.captions,
-      caption: captionAt(job.segments, f.t),
+      caption: captionAt(part.segments, f.t),
       title: job.title,
-      subtitle: job.subtitle,
-      difficulty: job.difficulty,
-      tags: job.tags,
-      techniqueLabels: job.techniqueLabels,
-      mismatch: job.mismatch,
+      subtitle: part.subtitle,
+      difficulty: part.difficulty,
+      tags: part.tags,
+      techniqueLabels: part.techniqueLabels,
+      mismatch: part.mismatch,
     });
     // khung đã vẽ xong cả cảnh 3D lẫn chú thích: đẩy vào video
     runtime.frameDrawn();
