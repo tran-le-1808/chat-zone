@@ -120,6 +120,46 @@ export interface StrokeInfo {
 
 const Ctx = createContext<BilliardGameContextType | null>(null);
 
+/** Lệnh đánh gửi đi (server hoặc trận cục bộ) */
+export type ShotRequest = Omit<ShotCommand, "cue"> & { shotId: string; expectedSeq: number };
+
+/**
+ * Nguồn trạng thái trận: server (socket) cho trận online, hoặc trận cục bộ (tự luyện / đấu bot).
+ * subscribe phải gọi `apply` ngay với snapshot hiện có (nếu có) và mỗi khi trận đổi.
+ */
+export interface BilliardTransport {
+  subscribe(apply: (m: BilliardMatch) => void): () => void;
+  shoot(cmd: ShotRequest): Promise<{ ok: boolean; error?: string }>;
+  /** Ghế của người chơi ở máy này (mặc định: vị trí userId trong match.players) */
+  myIndex?: (m: BilliardMatch) => number;
+}
+
+/** Trận online: trạng thái chính thức từ server qua socket */
+export const serverTransport: BilliardTransport = {
+  subscribe(apply) {
+    const onState = (m: BilliardMatch | null) => m && apply(m);
+    socket.on("bida:state", onState);
+    const sync = () =>
+      void monoEmit<BilliardMatch | null>("bida:sync").then((res) => {
+        if (res.ok && res.data) apply(res.data);
+      });
+    sync();
+    // Kết nối lại -> lấy snapshot mới nhất
+    const onReconnect = () => setTimeout(sync, 800);
+    socket.on("connect", onReconnect);
+    return () => {
+      socket.off("bida:state", onState);
+      socket.off("connect", onReconnect);
+    };
+  },
+  async shoot(cmd) {
+    let res = await monoEmit("bida:shoot", cmd);
+    // Mất kết nối giữa chừng -> gửi lại CÙNG shotId (server không xử lý 2 lần)
+    if (!res.ok && res.error?.startsWith("Mất kết nối")) res = await monoEmit("bida:shoot", cmd);
+    return { ok: res.ok, error: res.error };
+  },
+};
+
 const newShotId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -136,12 +176,26 @@ function loadPrefs(): BilliardPrefs {
   }
 }
 
-export function BilliardGameProvider({
+/** Trận online trong phòng (dùng RoomContext để biết userId) */
+export function BilliardGameProvider({ children }: { children: React.ReactNode }) {
+  const { myUserId } = useRoom();
+  return (
+    <BilliardGameCore transport={serverTransport} myUserId={myUserId ?? null}>
+      {children}
+    </BilliardGameCore>
+  );
+}
+
+/** Lõi trận bida: dùng chung cho trận online và trận cục bộ (tự luyện / đấu bot) */
+export function BilliardGameCore({
   children,
+  transport,
+  myUserId,
 }: {
   children: React.ReactNode;
+  transport: BilliardTransport;
+  myUserId: string | null;
 }) {
-  const { myUserId } = useRoom();
   const [match, setMatch] = useState<BilliardMatch | null>(null);
   const [playback, setPlayback] = useState<Playback | null>(null);
   const [lastVerdict, setLastVerdict] = useState<ShotRecord | null>(null);
@@ -244,22 +298,7 @@ export function BilliardGameProvider({
     }
   }, []);
 
-  useEffect(() => {
-    const onState = (m: BilliardMatch | null) => applyMatch(m);
-    socket.on("bida:state", onState);
-    const sync = () =>
-      void monoEmit<BilliardMatch | null>("bida:sync").then((res) => {
-        if (res.ok && res.data) applyMatch(res.data);
-      });
-    sync();
-    // Kết nối lại -> lấy snapshot mới nhất
-    const onReconnect = () => setTimeout(sync, 800);
-    socket.on("connect", onReconnect);
-    return () => {
-      socket.off("bida:state", onState);
-      socket.off("connect", onReconnect);
-    };
-  }, [applyMatch]);
+  useEffect(() => transport.subscribe(applyMatch), [applyMatch, transport]);
 
   // ---------- Bàn đã ổn định (qua busyUntil của server) -> được đánh ----------
   const [settledSeq, setSettledSeq] = useState(-1);
@@ -309,7 +348,7 @@ export function BilliardGameProvider({
   }, []);
 
   // ---------- Gửi cú đánh ----------
-  const myIndex = match && myUserId ? match.players.indexOf(myUserId) : -1;
+  const myIndex = !match ? -1 : transport.myIndex ? transport.myIndex(match) : myUserId ? match.players.indexOf(myUserId) : -1;
   const isMyTurn =
     !!match && match.winner === null && myIndex >= 0 && match.turn === myIndex;
   const animating = !!playback;
@@ -355,14 +394,11 @@ export function BilliardGameProvider({
           ? { tipX: 0, tipY: 0, elevation: DEFAULT_ELEVATION }
           : null),
       }));
-      let res = await monoEmit("bida:shoot", cmd);
-      // Mất kết nối giữa chừng -> gửi lại CÙNG shotId (server không xử lý 2 lần)
-      if (!res.ok && res.error?.startsWith("Mất kết nối"))
-        res = await monoEmit("bida:shoot", cmd);
+      const res = await transport.shoot(cmd);
       setShooting(false);
       if (!res.ok) toast.error(res.error ?? "Không đánh được, hãy thử lại");
     },
-    [aim, shooting],
+    [aim, shooting, transport],
   );
 
   // Cơ vướng bàn / băng / bi khác -> thả tay = huỷ, không đánh

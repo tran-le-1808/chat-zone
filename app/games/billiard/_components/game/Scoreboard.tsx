@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRoom } from "../../../monopoly/_context/RoomContext";
 import PlayerAvatar from "../../../monopoly/_components/PlayerAvatar";
 import { VoiceBadge } from "../../../monopoly/_components/VoiceControls";
@@ -13,7 +13,10 @@ import {
   MODE_LABEL,
 } from "../../_lib/types";
 
-/** Đồng hồ lượt (đếm theo giờ server đã quy đổi) */
+/**
+ * Thanh thời gian lượt: chạy mượt bằng CSS (width tuyến tính tới 0 trong đúng số giây còn lại),
+ * chỉ đặt lại khi hạn lượt đổi / tạm dừng — không còn nhảy bậc mỗi 250 ms. Số giây cập nhật riêng.
+ */
 function TurnTimer({
   deadline,
   paused,
@@ -23,29 +26,41 @@ function TurnTimer({
   paused: boolean;
   seconds?: number;
 }) {
+  const barRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, []);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const r = paused ? seconds : Math.max(0, (deadline - Date.now()) / 1000);
+    el.style.transition = "none";
+    el.style.width = `${Math.min(100, (r / seconds) * 100)}%`;
+    void el.offsetWidth; // ép trình duyệt áp vị trí đầu rồi mới chạy hiệu ứng
+    if (!paused && r > 0) {
+      el.style.transition = `width ${r}s linear`;
+      el.style.width = "0%";
+    }
+  }, [deadline, paused, seconds]);
   const remain = paused ? seconds : Math.max(0, (deadline - now) / 1000);
-  const pct = Math.min(100, (remain / seconds) * 100);
   const urgent = remain <= 10 && !paused;
   return (
     <div className="flex w-full items-center gap-2">
       <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
-        <div
-          className={`h-full rounded-full transition-[width] duration-200 ${urgent ? "bg-rose-500" : "bg-emerald-400"}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div ref={barRef} className={`h-full rounded-full ${urgent ? "bg-rose-500" : "bg-emerald-400"}`} />
       </div>
-      <span
-        className={`w-8 text-right text-xs tabular-nums [@media(max-height:500px)]:text-[10px] ${urgent ? "text-rose-300" : "text-gray-300"}`}
-      >
-        {Math.ceil(remain)}s
-      </span>
+      <span className={`w-7 text-right text-[11px] tabular-nums [@media(max-height:500px)]:text-[10px] ${urgent ? "text-rose-300" : "text-gray-300"}`}>{Math.ceil(remain)}s</span>
     </div>
   );
+}
+
+/** Tên hiển thị tối đa 25 ký tự */
+const NAME_MAX = 25;
+function shortName(name: string): string {
+  const chars = [...name];
+  return chars.length > NAME_MAX ? `${chars.slice(0, NAME_MAX).join("")}…` : name;
 }
 
 export default function Scoreboard() {
@@ -68,7 +83,7 @@ export default function Scoreboard() {
     return (
       <div
         key={uid}
-        className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 py-0.5 transition sm:px-2.5 sm:py-1 [@media(max-height:500px)]:gap-1.5 [@media(max-height:500px)]:rounded-xl [@media(max-height:500px)]:px-2 [@media(max-height:500px)]:py-0.5 ${
+        className={`flex w-full items-center gap-1.5 rounded-lg border px-1.5 py-0.5 transition ${
           active
             ? "border-emerald-400/70 bg-emerald-500/15 shadow-[0_0_18px_rgba(52,211,153,0.25)]"
             : "border-white/10 bg-black/40 opacity-75"
@@ -78,21 +93,21 @@ export default function Scoreboard() {
           <PlayerAvatar
             name={p?.name ?? "?"}
             avatar={p?.avatar}
-            size={isLandscape ? 22 : 32}
+            size={isLandscape ? 20 : 24}
           />
           {/* Bi cái của người chơi */}
           <span
-            className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border border-black/40 [@media(max-height:500px)]:h-2.5 [@media(max-height:500px)]:w-2.5"
+            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-black/40"
             style={{ background: BALL_COLORS[i] }}
             title={BALL_NAMES[i]}
           />
         </div>
         <div className="min-w-0 flex-1">
           <div
-            className={`flex items-center gap-1 text-xs font-bold sm:text-sm ${i === 1 ? "justify-end" : ""}`}
+            className={`flex items-center gap-1 text-[11px] font-bold sm:text-xs ${i === 1 ? "justify-end" : ""}`}
           >
-            <span className="truncate">
-              {p?.name ?? "Người chơi"}
+            <span className="whitespace-nowrap">
+              {shortName(p?.name ?? "Người chơi")}
               {myIndex === i ? " (bạn)" : ""}
             </span>
             <VoiceBadge userId={uid} size="xs" />
@@ -102,26 +117,22 @@ export default function Scoreboard() {
               </span>
             )}
           </div>
-          <div className="text-[10px] text-gray-400 sm:text-[11px] [@media(max-height:500px)]:hidden">
-            {active ? "Đang đánh" : "Chờ lượt"}
-            {st.currentRun > 1 ? ` · chuỗi ${st.currentRun}` : ""}
-          </div>
+          {st.currentRun > 1 && <div className="text-[10px] text-amber-300">chuỗi {st.currentRun}</div>}
         </div>
-        <div className="shrink-0 text-center [@media(max-height:500px)]:flex [@media(max-height:500px)]:items-baseline [@media(max-height:500px)]:gap-0.5">
-          <div className="text-lg font-black tabular-nums sm:text-xl [@media(max-height:500px)]:text-base">
-            {displayScores[i]}
-          </div>
-          <div className="text-[10px] text-gray-400">/{match.target}</div>
+        <div className="flex shrink-0 items-baseline gap-0.5">
+          <span className="text-base font-black tabular-nums">{displayScores[i]}</span>
+          <span className="text-[10px] text-gray-400">/{match.target}</span>
         </div>
       </div>
     );
   });
 
   return (
-    <div className="w-full space-y-0.5">
-      <div className="flex items-stretch gap-2">
+    <div className="ml-auto w-fit max-w-full space-y-0.5">
+      {/* 2 cột 1fr: hai thẻ luôn dài bằng nhau (bằng thẻ có tên dài hơn) */}
+      <div className="grid grid-cols-2 items-stretch sm:grid-cols-[1fr_auto_1fr] gap-2">
         {cards[0]}
-        <div className="hidden shrink-0 flex-col items-center justify-center px-1 text-center sm:flex">
+        <div className="hidden flex-col items-center justify-center px-1 text-center sm:flex">
           <span className="text-[10px] uppercase tracking-wider text-gray-400 [@media(max-height:500px)]:hidden">
             {MODE_LABEL[match.mode]}
           </span>

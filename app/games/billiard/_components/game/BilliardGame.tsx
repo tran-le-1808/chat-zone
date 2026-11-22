@@ -3,6 +3,7 @@
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
+import VoiceControls from "../../../monopoly/_components/VoiceControls";
 import { toast } from "sonner";
 import { useRoom } from "../../../monopoly/_context/RoomContext";
 import GameChat from "../../../monopoly/_components/GameChat";
@@ -163,12 +164,10 @@ export default function BilliardGame() {
             </button>
           )}
         />
-        {status && (
-          <span title={status} className="hidden min-w-0 max-w-[30vw] shrink truncate rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-300 sm:block">
-            {status}
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
+        {/* mic ngay cạnh nút chat */}
+        <VoiceControls variant="stack" />
+        {/* thẻ người chơi dồn sang phải, rộng vừa nội dung */}
+        <div className="ml-auto min-w-0">
           <Scoreboard />
         </div>
       </header>
@@ -183,7 +182,6 @@ export default function BilliardGame() {
           {/* Điều khiển đánh bi phủ lên bàn: thanh kéo cơ, bi cái nhỏ, ngắm tinh */}
           <ShotControls />
         </div>
-
       </div>
 
       <ResultModal />
