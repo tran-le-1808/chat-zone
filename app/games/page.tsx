@@ -81,7 +81,7 @@ const GAMES_LIST: GameItem[] = [
     players: "2 người",
     icon: Grid3x3,
     bannerBg: "from-[#1d2347] to-[#3a3f6b]",
-    isAvailable: false,
+    isAvailable: true,
     slug: "/games/caro",
   },
   {
