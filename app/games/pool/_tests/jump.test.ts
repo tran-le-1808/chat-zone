@@ -108,10 +108,11 @@ test("Năng lượng cơ học (động + thế năng) không bao giờ tăng tr
 
 test("Nhảy qua bi: cùng cú đánh, đánh thẳng thì trúng bi, đánh chúi cao thì bay qua không chạm", () => {
   const obstacle: BallSpot = { n: 1, x: -0.8, y: 0 };
-  const flat = simulateShot([cueAt(-1.1), obstacle], shot({ elevation: 0, power: 0.6 })).result;
+  // lực 0.738 ≈ 5.85 m/s (= lực 0.6 trước khi giảm lực đánh còn 3/4)
+  const flat = simulateShot([cueAt(-1.1), obstacle], shot({ elevation: 0, power: 0.738 })).result;
   assert.equal(flat.firstHit, 1);
   // Chỉ xét giai đoạn bay (sau đó bi lăn tới băng đối diện rồi dội lại có thể chạm bi chắn)
-  const hop = simulateShot([cueAt(-1.1), obstacle], shot({ elevation: 45, power: 0.6 }), { maxTime: 0.55 }).result;
+  const hop = simulateShot([cueAt(-1.1), obstacle], shot({ elevation: 45, power: 0.738 }), { maxTime: 0.55 }).result;
   assert.equal(hop.firstHit, null, "bay qua, không chạm bi chắn");
   const stay = hop.final.find((b) => b.n === 1)!;
   assert.ok(Math.abs(stay.x - obstacle.x) < 1e-9 && Math.abs(stay.y) < 1e-9, "bi bị nhảy qua đứng yên");

@@ -19,6 +19,8 @@ export interface Player {
   userId?: string;
   /** Ảnh đại diện của tài khoản */
   avatar?: string;
+  /** Quân do máy điều khiển (bot) — có giá trị là độ khó */
+  botLevel?: "easy" | "normal" | "hard";
 }
 
 export type TileType =

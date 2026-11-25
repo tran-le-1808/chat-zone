@@ -38,7 +38,7 @@ export default function MatchmakingOverlay() {
               {mm.mode === "RANKED" ? "Đấu xếp hạng" : "Tìm trận nhanh"} · Searching…
             </p>
             <p className="text-xs text-emerald-200/80">
-              {ruleName(mm.ruleSet)} · Rating {mm.rating} · Tìm đối thủ ±{mm.range}
+              {ruleName(mm.ruleSet)} · Rating {mm.rating} · Ghép với người đang chờ
             </p>
             <p className="text-xs text-slate-300">
               Đã chờ {Math.floor(wait / 60)}:{String(wait % 60).padStart(2, "0")}

@@ -13,7 +13,7 @@ import {
 import { poolSound } from "../_lib/poolSound";
 import { useShotInput, type ShotInput } from "../../_shared/shot/useShotInput";
 import { useShotSettings, type ShotSettings } from "../../_shared/shot/shotSettings";
-import { POOL_PHYSICS as C, configForPreset } from "../_lib/physics/config";
+import { POOL_PHYSICS as C, configForTable } from "../_lib/physics/config";
 import { tableFor } from "../_lib/physics/table";
 import { simulateShot } from "../_lib/physics/simulator";
 import { liftShot, type CueClearance } from "../_lib/physics/clearance";
@@ -216,7 +216,7 @@ function usePoolController(setup: PoolSetup) {
   const { config, mode } = setup;
   const practice = mode === "practice";
   /** Vật lý & hình học lỗ theo preset của trận */
-  const physics = useMemo(() => configForPreset(config.pocketPreset ?? "wpa"), [config.pocketPreset]);
+  const physics = useMemo(() => configForTable(config.pocketPreset ?? "wpa", config.tableSize), [config.pocketPreset, config.tableSize]);
   const table = useMemo(() => tableFor(physics), [physics]);
   const T = table;
   const names = useMemo<[string, string]>(
@@ -417,9 +417,9 @@ function usePoolController(setup: PoolSetup) {
         const r = m.rack;
         if (!r.ballInHand && !practice) return m;
         const kitchen = r.ballInHand === "kitchen";
-        const p = clampCuePlacement(x, y, kitchen);
+        const p = clampCuePlacement(x, y, kitchen, r.size);
         const others = r.balls.filter((b) => b.n !== 0);
-        if (!isValidCuePlacement(others, p.x, p.y, kitchen)) return m;
+        if (!isValidCuePlacement(others, p.x, p.y, kitchen, r.size)) return m;
         return { ...m, rack: { ...r, balls: withCueAt(r.balls, p.x, p.y) } };
       });
     },
@@ -430,7 +430,7 @@ function usePoolController(setup: PoolSetup) {
   const moveBall = useCallback((n: number, x: number, y: number) => {
     setMatch((m) => {
       const r = m.rack;
-      const p = clampCuePlacement(x, y, false);
+      const p = clampCuePlacement(x, y, false, r.size);
       const ok = r.balls.every((b) => b.n === n || Math.hypot(b.x - p.x, b.y - p.y) >= 2 * R + 1e-6);
       if (!ok) return m;
       return { ...m, rack: { ...r, balls: r.balls.map((b) => (b.n === n ? { ...b, ...p } : b)) } };
@@ -463,7 +463,7 @@ function usePoolController(setup: PoolSetup) {
     setMatch((m) => ({
       ...m,
       config: { ...m.config, type },
-      rack: newRack(type, 0, (Date.now() >>> 0) % 1e9),
+      rack: newRack(type, 0, (Date.now() >>> 0) % 1e9, m.config.tableSize),
     }));
   }, []);
   const undo = useCallback(() => {

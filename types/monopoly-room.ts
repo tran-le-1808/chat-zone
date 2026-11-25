@@ -20,6 +20,8 @@ export interface RoomPlayer {
   ready: boolean;
   connected: boolean;
   joinedAt: number;
+  /** Bot (máy chơi) — có giá trị là độ khó */
+  botLevel?: "easy" | "normal" | "hard";
 }
 
 export interface RoomInfo {

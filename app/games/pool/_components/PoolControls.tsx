@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Hand, Move, Shield, Target, TrendingUp, Undo2 } from "lucide-react";
+import { Hand, Move, Shield, Target, Undo2 } from "lucide-react";
 import { POOL_PHYSICS as C } from "../_lib/physics/config";
 import { computeStrike, sanitizeShot } from "../_lib/physics/cue";
 import { PREVIEW_POWER } from "../../_shared/shot/shotMath";
@@ -10,7 +10,7 @@ import { groupCleared } from "../_lib/rules/common";
 import ShotHud, { ToolButton, ToolPopover } from "../../_shared/shot/ShotHud";
 import VoiceControls from "../../monopoly/_components/VoiceControls";
 import { usePool } from "./PoolContext";
-import { useIsCompact } from "../../monopoly/_components/ui/useScreen";
+import ElevationControl, { CueTiltIcon } from "../../billiard/_components/game/ElevationControl";
 
 export function MiniBall({ n, size = 18 }: { n: number; size?: number }) {
   return (
@@ -63,7 +63,6 @@ export default function PoolControls({ onOpenCall }: { onOpenCall: () => void })
   const p = usePool();
   const { aim, setAim, canShoot, rack, phase, decl, setDecl, effectiveCall, needsCall, placing, setPlacing, practice, isHumanTurn, physics, table, clearance } = p;
   const [elevOpen, setElevOpen] = useState(false);
-  const isCompactTools = useIsCompact();
 
   const showCall = needsCall && isHumanTurn;
   const canSafety = !practice && rack.type === "eight" && !rack.isBreak && isHumanTurn;
@@ -111,17 +110,13 @@ export default function PoolControls({ onOpenCall }: { onOpenCall: () => void })
         </ToolButton>
       )}
       <div className="relative">
-        <ToolButton label={willJump ? "Góc nâng cơ — cú đánh này là JUMP SHOT (bi sẽ bay)" : "Góc nâng cơ"} active={elevOpen} disabled={!canShoot} onClick={() => setElevOpen((v) => !v)} badge={willJump ? "Nhảy" : undefined}>
-          <TrendingUp className="h-5 w-5" />
-          <span className="tabular-nums">{aim.elevation.toFixed(0)}°</span>
+        <ToolButton label={willJump ? "Góc nâng cơ — cú đánh này là JUMP SHOT (bi sẽ bay)" : "Góc nâng cơ"} bright active={elevOpen} disabled={!canShoot} onClick={() => setElevOpen((v) => !v)} badge={willJump ? "Nhảy" : undefined}>
+          <CueTiltIcon deg={aim.elevation} />
+          <span className="tabular-nums">{aim.elevation.toFixed(aim.elevation % 1 ? 1 : 0)}°</span>
         </ToolButton>
-        <ToolPopover open={elevOpen} onClose={() => setElevOpen(false)} side={isCompactTools ? (p.shotSettings.hand === "left" ? "right" : "left") : "up"}>
-          <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            <span className="flex justify-between">
-              Góc nâng cơ <span className="tabular-nums text-white">{aim.elevation.toFixed(0)}°</span>
-            </span>
-            <input type="range" min={0} max={C.maxElevation} step={1} value={aim.elevation} onChange={(e) => setAim({ elevation: Number(e.target.value) })} className="h-8 w-full accent-[#f4b942]" />
-          </label>
+        <ToolPopover open={elevOpen} onClose={() => setElevOpen(false)} side="center" title="Góc nâng cơ">
+          <ElevationControl value={aim.elevation} max={C.maxElevation} disabled={!canShoot} ballColor="#f4efe1" onChange={(elevation) => setAim({ elevation })} />
+          {willJump && <p className="mt-2 text-[11px] font-bold text-amber-300">Cú này là JUMP SHOT — bi cái sẽ bay khỏi mặt bàn.</p>}
         </ToolPopover>
       </div>
       {practice && (
@@ -157,6 +152,8 @@ export default function PoolControls({ onOpenCall }: { onOpenCall: () => void })
       ballColor="#f4efe1"
       onAimNudge={p.rotateAim}
       tools={tools}
+      // Giống Carom: công cụ (góc cơ…) xếp phía trên bi cái nhỏ; tập luyện nhiều nút hơn -> xếp cạnh bên
+      toolsAbove={!practice}
       toolsLayoutMobile="side"
       notice={notice}
     />

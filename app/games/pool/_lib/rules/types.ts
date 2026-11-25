@@ -1,5 +1,5 @@
 import type { BallSpot } from "../physics/types";
-import type { PocketPreset } from "../physics/config";
+import type { PocketPreset, TableSize } from "../physics/config";
 
 export type GameType = "eight" | "nine";
 export type Group = "solids" | "stripes";
@@ -25,6 +25,8 @@ export interface MatchConfig {
   seed: number;
   /** Độ khó lỗ (mặc định WPA Thi đấu; xếp hạng online khoá ở WPA) */
   pocketPreset?: PocketPreset;
+  /** Cỡ bàn (mặc định 9 feet) */
+  tableSize?: TableSize;
   /** Cho phép đường dự đoán quỹ đạo đầy đủ (xếp hạng: tắt) */
   allowFullGuide?: boolean;
 }
@@ -62,6 +64,8 @@ export type DecisionChoice =
 
 export interface RackState {
   type: GameType;
+  /** Cỡ bàn của ván (vắng = 9 feet, tương thích bản lưu cũ) */
+  size?: TableSize;
   /** Bi đang trên bàn (n = 0 là bi cái; vắng bi cái = đang chờ đặt bi trong tay) */
   balls: BallSpot[];
   turn: PlayerIndex;

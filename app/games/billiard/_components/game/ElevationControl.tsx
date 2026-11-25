@@ -3,16 +3,37 @@
 import { useRef } from "react";
 
 const QUICK = [5, 30, 60, 90];
+/** Các mức chọn nhanh, mức cuối = góc tối đa của bàn */
+const quickFor = (max: number) => [...QUICK.filter((v) => v < max), max];
 
 interface Props {
   value: number;
   onChange: (v: number) => void;
   disabled: boolean;
   ballColor: string;
+  /** Góc nâng tối đa (Carom 90°, Pool 80°) */
+  max?: number;
 }
 
-/** Góc nâng cơ 0..90°: hình minh hoạ + thanh trượt + chọn nhanh */
-function ElevationHorizontal({ value, onChange, disabled, ballColor }: Props) {
+/** Icon cây cơ bida chúc lên — nghiêng đúng theo góc nâng cơ hiện tại (0° nằm ngang, 90° dựng đứng) */
+export function CueTiltIcon({ deg }: { deg: number }) {
+  const a = (Math.max(8, Math.min(85, deg)) * Math.PI) / 180;
+  // đầu cơ chạm sát bi ở góc dưới phải, đuôi cơ chúc lên phía trên trái theo góc nâng
+  const tip = { x: 17, y: 18 };
+  const len = 17;
+  const butt = { x: tip.x - Math.cos(a) * len, y: tip.y - Math.sin(a) * len };
+  return (
+    <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden>
+      <circle cx={20} cy={20.5} r={2.8} fill="#ffffff" />
+      <line x1={butt.x} y1={butt.y} x2={tip.x} y2={tip.y} stroke="#f5c77e" strokeWidth={2.6} strokeLinecap="round" />
+      <line x1={butt.x} y1={butt.y} x2={butt.x + (tip.x - butt.x) * 0.35} y2={butt.y + (tip.y - butt.y) * 0.35} stroke="#c0803c" strokeWidth={3.2} strokeLinecap="round" />
+      <line x1={tip.x - Math.cos(a) * 1.6} y1={tip.y - Math.sin(a) * 1.6} x2={tip.x} y2={tip.y} stroke="#7dd3fc" strokeWidth={2.6} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Góc nâng cơ 0..max°: hình minh hoạ + thanh trượt + chọn nhanh */
+function ElevationHorizontal({ value, onChange, disabled, ballColor, max = 90 }: Props) {
   const rad = (value * Math.PI) / 180;
   // Hình minh hoạ: bi ở góc dưới phải, cơ đi ra phía trái - trên theo góc nâng
   const bx = 70;
@@ -30,7 +51,7 @@ function ElevationHorizontal({ value, onChange, disabled, ballColor }: Props) {
         </span>
         <span className="flex items-center gap-1 text-xs font-bold tabular-nums">
           {value.toFixed(value % 1 ? 1 : 0)}°
-          {value >= 90 && (
+          {value >= max && (
             <span className="rounded bg-rose-500/25 px-1 text-[9px] font-black uppercase text-rose-300">
               Tối đa
             </span>
@@ -69,7 +90,7 @@ function ElevationHorizontal({ value, onChange, disabled, ballColor }: Props) {
       <input
         type="range"
         min={0}
-        max={90}
+        max={max}
         step={0.5}
         value={value}
         disabled={disabled}
@@ -78,7 +99,7 @@ function ElevationHorizontal({ value, onChange, disabled, ballColor }: Props) {
         className="w-full accent-amber-400 disabled:opacity-40"
       />
       <div className="flex gap-1">
-        {QUICK.map((v) => (
+        {quickFor(max).map((v) => (
           <button
             key={v}
             type="button"
@@ -99,14 +120,14 @@ function ElevationHorizontal({ value, onChange, disabled, ballColor }: Props) {
 }
 
 /** Bản dọc gọn cho điện thoại xoay ngang: kéo lên / xuống để nâng / hạ cơ */
-function ElevationVertical({ value, onChange, disabled, ballColor }: Props) {
+function ElevationVertical({ value, onChange, disabled, ballColor, max = 90 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const set = (clientY: number) => {
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     const k = Math.max(0, Math.min(1, 1 - (clientY - r.top) / r.height));
-    onChange(Math.round(k * 90 * 2) / 2);
+    onChange(Math.round(k * max * 2) / 2);
   };
   const rad = (value * Math.PI) / 180;
   return (
@@ -117,7 +138,7 @@ function ElevationVertical({ value, onChange, disabled, ballColor }: Props) {
       <span className="text-xs font-bold tabular-nums">
         {value.toFixed(value % 1 ? 1 : 0)}°
       </span>
-      {value >= 90 && (
+      {value >= max && (
         <span className="rounded bg-rose-500/25 px-1 text-[8px] font-black uppercase text-rose-300">
           Tối đa
         </span>
@@ -142,7 +163,7 @@ function ElevationVertical({ value, onChange, disabled, ballColor }: Props) {
         tabIndex={0}
         aria-label="Góc nâng cơ so với mặt bàn"
         aria-valuemin={0}
-        aria-valuemax={90}
+        aria-valuemax={max}
         aria-valuenow={value}
         onPointerDown={(e) => {
           if (disabled) return;
@@ -156,15 +177,15 @@ function ElevationVertical({ value, onChange, disabled, ballColor }: Props) {
       >
         <div
           className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-amber-300 to-rose-500"
-          style={{ height: `${(value / 90) * 100}%` }}
+          style={{ height: `${(value / max) * 100}%` }}
         />
         <div
           className="absolute inset-x-0 h-0.5 bg-white"
-          style={{ bottom: `${(value / 90) * 100}%` }}
+          style={{ bottom: `${(value / max) * 100}%` }}
         />
       </div>
       <div className="grid w-full grid-cols-2 gap-0.5">
-        {QUICK.map((v) => (
+        {quickFor(max).map((v) => (
           <button
             key={v}
             type="button"

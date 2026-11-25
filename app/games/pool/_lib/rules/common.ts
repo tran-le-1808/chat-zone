@@ -1,5 +1,6 @@
 import type { BallSpot, ShotResult } from "../physics/types";
-import { POOL_TABLE } from "../physics/table";
+import { tableOfSize } from "../physics/table";
+import type { TableSize } from "../physics/config";
 import { defaultCueSpot, spotBall, withCueAt } from "./rack";
 import type { Group, PlayerIndex, RackState, RuleMessage } from "./types";
 
@@ -41,7 +42,7 @@ export function legalTargets(rack: RackState, p: PlayerIndex = rack.turn): numbe
   // Bi trong tay sau vạch (scratch khi phá): chỉ được nhắm bi nằm trước head string
   if (rack.restrictToFrontOfHeadString) {
     const front = new Set(
-      rack.balls.filter((b) => b.x > POOL_TABLE.headStringX).map((b) => b.n),
+      rack.balls.filter((b) => b.x > tableOfSize(rack.size).headStringX).map((b) => b.n),
     );
     return legalTargets({ ...rack, restrictToFrontOfHeadString: false }, p).filter((n) => front.has(n));
   }
@@ -55,14 +56,14 @@ export const potted = (res: ShotResult) =>
   res.pocketed.map((p) => p.ball).filter((n) => n !== 0);
 
 /** Sau lỗi: bàn sau cú đánh + bi cái (nếu vừa rơi lỗ thì đặt ở vị trí mặc định để kéo thả) */
-export function ensureCue(balls: BallSpot[], kitchen: boolean): BallSpot[] {
+export function ensureCue(balls: BallSpot[], kitchen: boolean, size?: TableSize): BallSpot[] {
   if (balls.some((b) => b.n === 0)) return balls;
-  const p = defaultCueSpot(balls, kitchen);
+  const p = defaultCueSpot(balls, kitchen, size);
   return withCueAt(balls, p.x, p.y);
 }
 
-export function respot(balls: BallSpot[], n: number): BallSpot[] {
-  return spotBall(balls, n);
+export function respot(balls: BallSpot[], n: number, size?: TableSize): BallSpot[] {
+  return spotBall(balls, n, size);
 }
 
 /** Mô tả bi nào văng khỏi bàn ("Bi cái văng khỏi bàn", "Bi 3, 7 văng khỏi bàn") */

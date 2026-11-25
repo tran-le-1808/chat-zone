@@ -8,6 +8,14 @@ import { MiniBall } from "./PoolControls";
 import { usePool } from "./PoolContext";
 import { useIsCompact } from "../../monopoly/_components/ui/useScreen";
 
+/** Tên hiển thị tối đa 25 ký tự (giống Bida Carom) */
+const NAME_MAX = 25;
+function shortName(name: string): string {
+  const chars = [...name];
+  return chars.length > NAME_MAX ? `${chars.slice(0, NAME_MAX).join("")}…` : name;
+}
+
+/** Thẻ người chơi: hiện đủ tên, rộng vừa nội dung; hai thẻ luôn dài bằng nhau (lưới 1fr) */
 function PlayerCard({ i }: { i: PlayerIndex }) {
   const { setup, rack, match, practice } = usePool();
   const compact = useIsCompact();
@@ -18,72 +26,59 @@ function PlayerCard({ i }: { i: PlayerIndex }) {
   const fouls = rack.fouls[i];
   const low = lowestBall(rack.balls);
 
-  // Mobile: gọn một dòng — tên · nhóm bi (chữ) · lỗi liên tiếp · điểm. Không có danh sách bi.
-  if (compact) {
-    return (
-      <div
-        className={`flex min-w-0 flex-1 items-center gap-1 rounded-lg border px-1.5 py-px transition ${active ? "border-[#f4b942]/70 bg-[#f4b942]/12" : "border-white/10 bg-black/30"} ${i === 1 ? "flex-row-reverse text-right" : ""}`}
-      >
-        {pl.ai && <Bot className="h-3 w-3 shrink-0 text-sky-300" />}
-        <span className="min-w-0 truncate text-[11px] font-bold leading-tight">{pl.name}</span>
-        {active && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#ffd166]" />}
-        {!practice && rack.type === "eight" && group && (
-          <span className="shrink-0 rounded bg-white/10 px-1 text-[9px] font-bold text-slate-300">{group === "solids" ? "Trơn" : "Sọc"}</span>
-        )}
-        {!practice && rack.type === "nine" && fouls > 0 && (
-          <span className="flex shrink-0 items-center gap-0.5" title="Lỗi liên tiếp">
-            {[0, 1, 2].map((k) => (
-              <span key={k} className={`h-1.5 w-1.5 rounded-full ${k < fouls ? (fouls >= 2 ? "bg-rose-500" : "bg-amber-400") : "bg-white/15"}`} />
-            ))}
-          </span>
-        )}
-        {!practice && <span className={`shrink-0 text-sm font-black tabular-nums leading-tight text-[#ffd166] ${i === 1 ? "mr-auto" : "ml-auto"}`}>{match.score[i]}</span>}
-        {group && <span className="sr-only">{GROUP_LABEL[group]}</span>}
-      </div>
-    );
-  }
+  const foulDots = (sz: string) => (
+    <span className="flex shrink-0 items-center gap-0.5" title="Lỗi liên tiếp">
+      {[0, 1, 2].map((k) => (
+        <span key={k} className={`${sz} rounded-full ${k < fouls ? (fouls >= 2 ? "bg-rose-500" : "bg-amber-400") : "bg-white/15"}`} />
+      ))}
+    </span>
+  );
 
   return (
     <div
-      className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 py-0.5 transition [@media(max-height:500px)]:py-0.5 ${active ? "border-[#f4b942]/70 bg-[#f4b942]/12 shadow-[0_0_18px_rgba(244,185,66,0.18)]" : "border-white/10 bg-black/30"} ${i === 1 ? "flex-row-reverse text-right" : ""}`}
+      className={`flex w-full items-center gap-1.5 rounded-lg border px-1.5 py-0.5 transition ${
+        active ? "border-emerald-400/70 bg-emerald-500/15 shadow-[0_0_18px_rgba(52,211,153,0.25)]" : "border-white/10 bg-black/40 opacity-75"
+      } ${i === 1 ? "flex-row-reverse text-right" : ""}`}
     >
       <div className="min-w-0 flex-1">
-        <div className={`flex items-center gap-1 text-xs font-bold sm:text-sm ${i === 1 ? "justify-end" : ""}`}>
+        <div className={`flex items-center gap-1 text-[11px] font-bold sm:text-xs ${i === 1 ? "justify-end" : ""}`}>
           {pl.ai && <Bot className="h-3.5 w-3.5 shrink-0 text-sky-300" />}
-          <span className="truncate">{pl.name}</span>
-          {active && <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#ffd166]" />}
-        </div>
-        <div className={`mt-0.5 flex min-h-[18px] flex-wrap items-center gap-0.5 ${i === 1 ? "justify-end" : ""}`}>
-          {!practice && rack.type === "eight" &&
-            (group ? (
-              (group === "solids" ? SOLIDS : STRIPES).map((n) => (
-                <span key={n} className={on.has(n) ? "" : "opacity-20"}>
-                  <MiniBall n={n} size={14} />
-                </span>
-              ))
-            ) : (
-              <span className="text-[10px] text-slate-400">{rack.isBreak ? "Chờ phá bi" : "Bàn mở"}</span>
-            ))}
-          {!practice && rack.type === "nine" && (
-            <>
-              {active && low !== null && (
-                <span className="flex items-center gap-1 text-[10px] text-slate-300">
-                  Chạm trước <MiniBall n={low} size={14} />
-                </span>
-              )}
-              <span className={`flex items-center gap-0.5 ${i === 1 ? "order-first" : ""}`} title="Lỗi liên tiếp">
-                {[0, 1, 2].map((k) => (
-                  <span key={k} className={`h-2 w-2 rounded-full ${k < fouls ? (fouls >= 2 ? "bg-rose-500" : "bg-amber-400") : "bg-white/15"}`} />
-                ))}
-              </span>
-            </>
+          <span className="min-w-0 truncate" title={pl.name}>{shortName(pl.name)}</span>
+          {compact && !practice && rack.type === "eight" && group && (
+            <span className="shrink-0 rounded bg-white/10 px-1 text-[9px] font-bold text-slate-300">{group === "solids" ? "Trơn" : "Sọc"}</span>
           )}
+          {compact && !practice && rack.type === "nine" && fouls > 0 && foulDots("h-1.5 w-1.5")}
         </div>
+        {!compact && !practice && (
+          <div className={`mt-0.5 flex min-h-[16px] flex-wrap items-center gap-0.5 ${i === 1 ? "justify-end" : ""}`}>
+            {rack.type === "eight" &&
+              (group ? (
+                (group === "solids" ? SOLIDS : STRIPES).map((n) => (
+                  <span key={n} className={on.has(n) ? "" : "opacity-20"}>
+                    <MiniBall n={n} size={13} />
+                  </span>
+                ))
+              ) : (
+                <span className="text-[10px] text-slate-400">{rack.isBreak ? "Chờ phá bi" : "Bàn mở"}</span>
+              ))}
+            {rack.type === "nine" && (
+              <>
+                {active && low !== null && (
+                  <span className="flex items-center gap-1 text-[10px] text-slate-300">
+                    Chạm trước <MiniBall n={low} size={13} />
+                  </span>
+                )}
+                <span className={i === 1 ? "order-first" : ""}>{foulDots("h-2 w-2")}</span>
+              </>
+            )}
+          </div>
+        )}
         {group && <span className="sr-only">{GROUP_LABEL[group]}</span>}
       </div>
       {!practice && (
-        <div className="shrink-0 rounded-lg bg-black/40 px-1.5 text-center">
-          <div className="text-base font-black tabular-nums leading-tight text-[#ffd166]">{match.score[i]}</div>
+        <div className="flex shrink-0 items-baseline gap-0.5">
+          <span className="text-base font-black tabular-nums">{match.score[i]}</span>
+          <span className="text-[10px] text-gray-400">/{setup.config.raceTo}</span>
         </div>
       )}
     </div>
@@ -92,31 +87,24 @@ function PlayerCard({ i }: { i: PlayerIndex }) {
 
 export function Scoreboard() {
   const { practice, match, setup, rack } = usePool();
-  const compact = useIsCompact();
   if (practice)
     return (
-      <div className="flex flex-1 items-center justify-center rounded-xl border border-white/10 bg-black/30 px-2 py-0.5 text-xs font-bold sm:rounded-2xl sm:px-3 sm:py-1.5 sm:text-sm">
+      <div className="ml-auto w-fit rounded-lg border border-white/10 bg-black/40 px-2 py-0.5 text-xs font-bold sm:px-3 sm:py-1 sm:text-sm">
         Tập luyện · {rack.type === "eight" ? "8 bi" : "9 bi"}
       </div>
     );
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
-      <PlayerCard i={0} />
-      {compact ? (
-        <div className="shrink-0 text-center text-[9px] font-bold leading-none text-slate-400">
-          {setup.config.type === "eight" ? "8 bi" : "9 bi"}
-          <span className="block text-slate-500">
-            {match.rackNo}/{setup.config.raceTo}
-          </span>
+    <div className="ml-auto w-fit max-w-full">
+      {/* 2 cột 1fr: hai thẻ luôn dài bằng nhau (bằng thẻ có tên dài hơn) */}
+      <div className="grid grid-cols-2 items-stretch gap-2 sm:grid-cols-[1fr_auto_1fr]">
+        <PlayerCard i={0} />
+        <div className="hidden flex-col items-center justify-center px-1 text-center leading-tight sm:flex">
+          <span className="text-[10px] uppercase tracking-wider text-gray-400 [@media(max-height:500px)]:hidden">{setup.config.type === "eight" ? "8 bi" : "9 bi"}</span>
+          <span className="text-xs font-bold text-amber-300">Chạm {setup.config.raceTo}</span>
+          <span className="text-[10px] text-gray-500">Ván {match.rackNo}</span>
         </div>
-      ) : (
-        <div className="shrink-0 text-center leading-tight">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{setup.config.type === "eight" ? "8 bi" : "9 bi"}</div>
-          <div className="text-[11px] text-slate-300">Chạm {setup.config.raceTo}</div>
-          <div className="text-[10px] text-slate-500">Ván {match.rackNo}</div>
-        </div>
-      )}
-      <PlayerCard i={1} />
+        <PlayerCard i={1} />
+      </div>
     </div>
   );
 }

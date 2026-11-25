@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import SingleDice, { Dice3DRef } from "./Dice3D";
 import { ToyKeyframes, toyFont } from "./ui/ToyUI";
+import { useGame } from "../_context/GameContext";
+import { playDiceResult, playDiceRoll } from "./board/anim/stepSound";
 
 const ZONES = [
   {
@@ -52,6 +54,7 @@ export default function DiceRoller3D({
 }: DiceRoller3DProps) {
   // Kim chỉ lực được di chuyển trực tiếp qua ref (không re-render React mỗi khung hình)
   const markerTrackRef = useRef<HTMLDivElement>(null);
+  const { announceRoll } = useGame();
   const [isPressing, setIsPressing] = useState(false);
   const [isRolling, setIsRolling] = useState(false);
   const [showCenterCanvas, setShowCenterCanvas] = useState(false);
@@ -174,13 +177,16 @@ export default function DiceRoller3D({
     endedDiceRef.current = 0;
     finishedRef.current = false;
     setRollReq({ d1: finalD1, d2: finalD2, id: Date.now() });
+    // Online: người khác cũng thấy xúc xắc xoay & số nút ngay lúc này
+    announceRoll(finalD1, finalD2);
+    playDiceRoll();
 
     setIsRolling(true);
     setShowResultBadge(false);
 
     // Mở Canvas 3D
     setShowCenterCanvas(true);
-  }, [isRolling]);
+  }, [isRolling, announceRoll]);
 
   // 3. KẾT THÚC LẮC: chờ CẢ 2 xúc xắc báo đã dừng, hiện kết quả 1 giây rồi báo cho game.
   //    Có hẹn giờ dự phòng để không bao giờ bị kẹt (vd. tab bị ẩn làm dừng hiệu ứng).
@@ -191,6 +197,7 @@ export default function DiceRoller3D({
     setDiceValues([d1, d2]);
     setIsRolling(false);
     setShowResultBadge(true);
+    playDiceResult(d1 === d2);
     timersRef.current.push(
       setTimeout(() => {
         setShowCenterCanvas(false);

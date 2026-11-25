@@ -107,8 +107,8 @@ test("Lực: kéo 0→100% ánh xạ đúng, phi tuyến nhẹ, vùng thấp có
   // Carom (engine tuyến tính): d^1.4 — cú nhẹ nhạy hơn
   assert.ok(powerCurve(0.5, 1.4) < 0.5);
   assert.equal(powerCurve(1, 1.4), 1);
-  // Bida Lỗ: engine đã có p^1.5 -> v tăng đơn điệu, vmin ≈ 0.5, vmax ≈ 12 m/s
-  assert.ok(Math.abs(powerToSpeed(0, C) - 0.5) < 1e-9 && Math.abs(powerToSpeed(1, C) - 12) < 1e-9);
+  // Bida Lỗ: engine đã có p^1.5 -> v tăng đơn điệu, vmin ≈ 0.375, vmax ≈ 9 m/s (3/4 bản cũ 0.5 / 12)
+  assert.ok(Math.abs(powerToSpeed(0, C) - 0.375) < 1e-9 && Math.abs(powerToSpeed(1, C) - 9) < 1e-9);
   // Đường cong p^1.5: bước ở vùng lực thấp nhỏ hơn bước cùng độ rộng ở vùng cao -> lực nhẹ dễ kiểm soát
   assert.ok(powerToSpeed(0.25, C) - powerToSpeed(0.05, C) < powerToSpeed(1, C) - powerToSpeed(0.8, C));
 });

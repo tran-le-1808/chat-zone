@@ -69,7 +69,7 @@ test("3.8.2b — cú dừng (stop shot) trong mô phỏng đầy đủ: bi cái 
   // Đánh hơi dưới tâm để bi tới bi mục tiêu lúc vừa hết xoáy ngược (trượt thuần)
   const cue = cueWhenObjectHitsRail(
     [{ n: 0, x: -0.4, y: 0.2 }, { n: 1, x: 0, y: 0.2 }],
-    shot({ power: 0.24, tipY: -0.35 }),
+    shot({ power: 0.308, tipY: -0.35 }), // ≈ 1.85 m/s (= lực 0.24 trước khi giảm lực còn 3/4)
   );
   // Bi cái gần như đứng tại điểm va chạm (≈ −0.057)
   assert.ok(Math.abs(cue.p.x - (-2 * R)) < 0.12, `bi cái ở ${cue.p.x}`);

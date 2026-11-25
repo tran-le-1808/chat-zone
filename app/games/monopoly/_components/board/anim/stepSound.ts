@@ -208,3 +208,84 @@ export function playFlightLand() {
     /* bỏ qua */
   }
 }
+
+// ---------------------------------------------------------------------------
+// Âm xúc xắc: lắc lóc cóc trong tay -> lăn & nảy trên bàn (thưa dần) -> dừng
+// ---------------------------------------------------------------------------
+
+/** Một tiếng "cạch" của xúc xắc nhựa: nhiễu ngắn lọc dải cao + tiếng gõ trầm của mặt bàn */
+function clack(ac: AudioContext, t: number, vol: number, bright = 1) {
+  const src = ac.createBufferSource();
+  src.buffer = noise(ac);
+  const bp = ac.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = (2600 + Math.random() * 1800) * bright;
+  bp.Q.value = 2.2;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035 + Math.random() * 0.02);
+  src.connect(bp).connect(g).connect(master as GainNode);
+  src.start(t, Math.random() * 1.5);
+  src.stop(t + 0.07);
+  // Gõ vào mặt bàn gỗ
+  const o = ac.createOscillator();
+  o.type = "sine";
+  o.frequency.setValueAtTime(420 + Math.random() * 120, t);
+  o.frequency.exponentialRampToValueAtTime(160, t + 0.05);
+  const og = ac.createGain();
+  og.gain.setValueAtTime(0.0001, t);
+  og.gain.exponentialRampToValueAtTime(vol * 0.6, t + 0.003);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+  o.connect(og).connect(master as GainNode);
+  o.start(t);
+  o.stop(t + 0.07);
+}
+
+/** Tiếng lắc + lăn xúc xắc, kéo dài khoảng `dur` giây (khớp hoạt ảnh xoay) */
+export function playDiceRoll(dur = 1.3) {
+  if (!stepSoundEnabled()) return;
+  try {
+    const ac = audio();
+    if (!ac) return;
+    const t0 = ac.currentTime + 0.01;
+    // 1. Lắc trong tay: chuỗi cạch nhỏ dày đặc
+    for (let i = 0; i < 7; i++) {
+      clack(ac, t0 + i * 0.028 + Math.random() * 0.01, 0.05 + Math.random() * 0.03, 1.15);
+    }
+    // 2. Lăn trên bàn: 2 viên, mỗi viên nảy thưa dần & nhỏ dần
+    const start = t0 + 0.22;
+    const span = dur - 0.22;
+    for (let die = 0; die < 2; die++) {
+      let x = die * 0.04;
+      let gap = 0.06;
+      let vol = 0.22;
+      while (x < span) {
+        clack(ac, start + x, vol);
+        gap *= 1.32 + Math.random() * 0.12;
+        vol *= 0.84;
+        x += gap;
+      }
+    }
+  } catch {
+    /* âm thanh là phụ */
+  }
+}
+
+/** Xúc xắc dừng: tiếng "ting" báo kết quả; ra đôi thì vui hơn */
+export function playDiceResult(double = false) {
+  if (!stepSoundEnabled()) return;
+  try {
+    const ac = audio();
+    if (!ac) return;
+    const t = ac.currentTime + 0.005;
+    pluck(ac, t, 784, 0.1, 0.4);
+    pluck(ac, t + 0.07, 1175, 0.09, 0.5);
+    if (double) {
+      pluck(ac, t + 0.14, 1568, 0.09, 0.6);
+      pluck(ac, t + 0.21, 2093, 0.07, 0.7);
+    }
+  } catch {
+    /* bỏ qua */
+  }
+}

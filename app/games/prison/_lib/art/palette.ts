@@ -1,0 +1,48 @@
+/**
+ * Bảng màu giới hạn của toàn game (40 màu, tông xám–xanh–cam ấm). Sprite và bản đồ chỉ dùng các màu này.
+ * Toàn bộ hình ảnh được vẽ bằng code từ bảng màu — không dùng tài sản của bên khác.
+ */
+export const PALETTE = {
+  ink: "#0b0d16",
+  night: "#020414",
+  wallDark: "#171a2e",
+  wall: "#232741",
+  wallTop: "#30365a",
+  stone: "#393e51",
+  stoneLight: "#3d4256",
+  cellFloor: "#464055",
+  cellFloorLight: "#4a4458",
+  slate: "#64748b",
+  steel: "#94a3b8",
+  silver: "#cbd5e1",
+  white: "#f8fafc",
+  grass: "#395632",
+  grassLight: "#3c5a35",
+  bush: "#166534",
+  outside: "#1a2f1d",
+  outsideLight: "#1d3320",
+  woodDark: "#5b3a1e",
+  wood: "#7c5634",
+  woodLight: "#9a6c42",
+  rust: "#92400e",
+  orange: "#ea580c",
+  orangeLight: "#f97316",
+  amber: "#f59e0b",
+  gold: "#ffd166",
+  red: "#c81d25",
+  redDark: "#7f1118",
+  blood: "#5b1414",
+  navy: "#1e3a8a",
+  navyDark: "#172554",
+  blue: "#3b82f6",
+  sky: "#38bdf8",
+  teal: "#0f766e",
+  green: "#4ade80",
+  purple: "#a855f7",
+  skin: "#e0ac69",
+  skinDark: "#a56b3f",
+  hairDark: "#2b1d12",
+  hairBrown: "#6b4423",
+} as const;
+
+export type PaletteColor = (typeof PALETTE)[keyof typeof PALETTE];

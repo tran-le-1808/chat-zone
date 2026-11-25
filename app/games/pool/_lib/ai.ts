@@ -119,18 +119,19 @@ function placementOptions(rack: RackState, targets: number[]): { x: number; y: n
         for (const side of [0, 0.06]) {
           const x = ball.x - (ox / l) * (2 * R + back) - (oy / l) * side;
           const y = ball.y - (oy / l) * (2 * R + back) + (ox / l) * side;
-          if (isValidCuePlacement(others, x, y, kitchen)) out.push({ x, y });
+          if (isValidCuePlacement(others, x, y, kitchen, rack.size)) out.push({ x, y });
         }
       }
     }
   }
   if (kitchen) {
-    for (const x of [-0.75, -0.95, -1.1])
-      for (const y of [-0.4, -0.2, 0, 0.2, 0.4])
-        if (isValidCuePlacement(others, x, y, true)) out.push({ x, y });
+    // Các điểm mẫu sau vạch đầu bàn, tỉ lệ theo cỡ bàn (bàn 9 feet: x = -0.75 / -0.95 / -1.1 m)
+    for (const fx of [0.295, 0.374, 0.433])
+      for (const fy of [-0.315, -0.157, 0, 0.157, 0.315])
+        if (isValidCuePlacement(others, -fx * T.L, fy * T.W, true, rack.size)) out.push({ x: -fx * T.L, y: fy * T.W });
   }
   const cur = rack.balls.find((b) => b.n === 0);
-  if (cur && isValidCuePlacement(others, cur.x, cur.y, kitchen)) out.push({ x: cur.x, y: cur.y });
+  if (cur && isValidCuePlacement(others, cur.x, cur.y, kitchen, rack.size)) out.push({ x: cur.x, y: cur.y });
   return out;
 }
 

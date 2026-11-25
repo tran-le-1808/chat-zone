@@ -7,7 +7,7 @@ import { Flag } from "lucide-react";
 import { socket } from "@/lib/socket";
 import { monoEmit } from "@/lib/monopolySocket";
 import { useRoom } from "../../../monopoly/_context/RoomContext";
-import { configForPreset } from "../../_lib/physics/config";
+import { configForTable } from "../../_lib/physics/config";
 import { tableFor } from "../../_lib/physics/table";
 import { simulateShot } from "../../_lib/physics/simulator";
 import { liftShot, type CueClearance } from "../../_lib/physics/clearance";
@@ -123,7 +123,7 @@ export function useOnlinePoolController(): PoolController {
     [applySnap, pushBanners],
   );
 
-  const physicsOf = (s: PoolSnapshot | null) => configForPreset(s?.settings.pocketPreset ?? "wpa");
+  const physicsOf = (s: PoolSnapshot | null) => configForTable(s?.settings.pocketPreset ?? "wpa", s?.settings.tableSize);
 
   /** SHOT_RESULT: cú của mình -> đối chiếu hash; cú của người khác -> tự mô phỏng lại từ input */
   const onShot = useCallback(
@@ -204,7 +204,7 @@ export function useOnlinePoolController(): PoolController {
   );
   const actor = rack ? (rack.decision?.by ?? rack.turn) : 0;
   const isMyTurn = !!rack && !spectator && actor === mySeat && match!.matchWinner === null;
-  const physics = useMemo(() => physicsOf(snap), [snap?.settings.pocketPreset]); // eslint-disable-line react-hooks/exhaustive-deps
+  const physics = useMemo(() => physicsOf(snap), [snap?.settings.pocketPreset, snap?.settings.tableSize]); // eslint-disable-line react-hooks/exhaustive-deps
   const table = useMemo(() => tableFor(physics), [physics]);
   const names = useMemo<[string, string]>(() => snap?.names ?? ["", ""], [snap?.names]);
   const setup = useMemo<PoolSetup>(
@@ -217,11 +217,12 @@ export function useOnlinePoolController(): PoolController {
           { name: names[1], ai: null },
         ],
         pocketPreset: snap?.settings.pocketPreset ?? "wpa",
+        tableSize: snap?.settings.tableSize ?? "9ft",
         allowFullGuide: snap?.settings.allowFullGuide ?? false,
         autoCall: snap?.settings.autoCall ?? true,
       },
     }),
-    [match?.config, names, snap?.settings.pocketPreset, snap?.settings.allowFullGuide, snap?.settings.autoCall],
+    [match?.config, names, snap?.settings.pocketPreset, snap?.settings.tableSize, snap?.settings.allowFullGuide, snap?.settings.autoCall],
   );
 
   // Lượt mới -> đặt lại ngắm / khai báo; bi trong tay -> bật chế độ đặt bi
@@ -320,9 +321,9 @@ export function useOnlinePoolController(): PoolController {
     (x: number, y: number) => {
       if (!isMyTurn || !baseRack?.ballInHand) return;
       const kitchen = baseRack.ballInHand === "kitchen";
-      const p = clampCuePlacement(x, y, kitchen);
+      const p = clampCuePlacement(x, y, kitchen, baseRack.size);
       const others = baseRack.balls.filter((b) => b.n !== 0);
-      if (isValidCuePlacement(others, p.x, p.y, kitchen)) setCueOverride(p);
+      if (isValidCuePlacement(others, p.x, p.y, kitchen, baseRack.size)) setCueOverride(p);
     },
     [isMyTurn, baseRack],
   );

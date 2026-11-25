@@ -8,12 +8,15 @@
     "start": "next start",
     "lint": "eslint",
     "test:mono-anim": "node --import ./app/games/pool/_tests/register.mjs --test app/games/monopoly/_components/board/anim/_tests/*.test.ts",
+    "test:mono-bot": "node --import ./app/games/pool/_tests/register.mjs --test app/games/monopoly/_lib/_tests/*.test.ts",
     "test:pool": "node --import ./app/games/pool/_tests/register.mjs --test app/games/pool/_tests/*.test.ts",
     "pool:sync-shared": "node scripts/sync-pool-shared.mjs",
     "pool:pocket-map": "node --import ./app/games/pool/_tests/register.mjs app/games/pool/_tests/pocket-map.ts",
+    "test:prison": "node --import ./app/games/prison/_tests/register.mjs --test app/games/prison/_tests/*.test.ts",
     "test:caro": "node --import ./app/games/pool/_tests/register.mjs --test app/games/caro/_tests/*.test.ts",
     "caro:sync-shared": "mkdir -p ../login-system/src/caro/shared && cp app/games/caro/_lib/rules.ts app/games/caro/_lib/engine/book.ts ../login-system/src/caro/shared/ && cd ../login-system && npx prettier --write src/caro/shared/*.ts",
-    "test:billiard": "node --import ./app/games/pool/_tests/register.mjs --test app/games/billiard/_tests/*.test.ts"
+    "test:billiard": "node --import ./app/games/pool/_tests/register.mjs --test app/games/billiard/_tests/*.test.ts",
+    "prison:sync-shared": "node scripts/sync-prison-shared.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

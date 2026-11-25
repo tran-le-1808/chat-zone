@@ -198,11 +198,14 @@ function GameLayout({ onExit }: { onExit: () => void }) {
           />
         )}
         {status && (
-          <span title={status} className="hidden min-w-0 max-w-[34vw] shrink truncate rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-300 sm:block">
+          <span title={status} className="hidden min-w-0 max-w-[34vw] shrink truncate rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-300 sm:block [@media(max-height:500px)]:hidden">
             {status}
           </span>
         )}
-        <Scoreboard />
+        {/* thẻ người chơi dồn sang phải, rộng vừa nội dung (giống Bida Carom) */}
+        <div className="ml-auto min-w-0">
+          <Scoreboard />
+        </div>
         {online && (
           <div className="flex shrink-0 items-center gap-0.5 rounded-xl border border-white/10 bg-black/40 p-0.5">
             <ShotClock />

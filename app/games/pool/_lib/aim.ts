@@ -17,9 +17,9 @@ export interface AimCast {
 }
 
 /** Khoảng cách từ p theo hướng d tới mặt băng (bảng chữ nhật thu vào R) */
-export function rayToRail(px: number, py: number, dx: number, dy: number, margin = R): number {
-  const hx = T.L / 2 - margin;
-  const hy = T.W / 2 - margin;
+export function rayToRail(px: number, py: number, dx: number, dy: number, margin = R, table: TableGeometry = T): number {
+  const hx = table.L / 2 - margin;
+  const hy = table.W / 2 - margin;
   let t = Infinity;
   if (dx > 1e-9) t = Math.min(t, (hx - px) / dx);
   if (dx < -1e-9) t = Math.min(t, (-hx - px) / dx);
@@ -32,13 +32,13 @@ export function rayToRail(px: number, py: number, dx: number, dy: number, margin
  * Đường ngắm thẳng (bỏ qua xoáy / squirt): bi cái đi theo hướng cơ tới bi đầu tiên hoặc băng.
  * Dùng cho bi ma, đường bi mục tiêu và quy tắc tiếp tuyến 90°.
  */
-export function castAim(balls: BallSpot[], dirX: number, dirY: number): AimCast | null {
+export function castAim(balls: BallSpot[], dirX: number, dirY: number, table: TableGeometry = T): AimCast | null {
   const cue = balls.find((b) => b.n === 0);
   if (!cue) return null;
   const l = Math.hypot(dirX, dirY) || 1;
   const dx = dirX / l;
   const dy = dirY / l;
-  let best = rayToRail(cue.x, cue.y, dx, dy);
+  let best = rayToRail(cue.x, cue.y, dx, dy, R, table);
   let hit: BallSpot | null = null;
   for (const b of balls) {
     if (b.n === 0) continue;
@@ -117,7 +117,7 @@ export function autoCall(
   legal: number[],
   table: TableGeometry = T,
 ): CallShot | null {
-  const cast = castAim(balls, dirX, dirY);
+  const cast = castAim(balls, dirX, dirY, table);
   if (!cast || cast.hitBall === null || !cast.objectDir || !legal.includes(cast.hitBall)) return null;
   const ball = balls.find((b) => b.n === cast.hitBall)!;
   return { ball: ball.n, pocket: bestPocketFor(ball, cast.objectDir, table).pocket };
@@ -190,7 +190,7 @@ export function targetPath(
       blocker = b.n;
     }
   }
-  const tRail = rayToRail(target.x, target.y, dx, dy);
+  const tRail = rayToRail(target.x, target.y, dx, dy, R, table);
   // Lỗ: đường đi lọt qua miệng lỗ
   let pocket: number | null = null;
   let tPocket = Infinity;

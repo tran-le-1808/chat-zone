@@ -207,8 +207,8 @@ export default function PoolAim3D() {
   const cue = rack.balls.find((b) => b.n === 0);
   const showAim = !!cue && (canShoot || (phase === "thinking" && !isHumanTurn));
   const cast = useMemo(
-    () => (showAim ? castAim(rack.balls, aim.dirX, aim.dirY) : null),
-    [showAim, rack.balls, aim.dirX, aim.dirY],
+    () => (showAim ? castAim(rack.balls, aim.dirX, aim.dirY, T) : null),
+    [showAim, rack.balls, aim.dirX, aim.dirY, T],
   );
   // Chế độ xếp hạng: tắt đường dự đoán quỹ đạo đầy đủ
   const guide = prefs.guide === "full" && setup.config.allowFullGuide === false ? "ghost" : prefs.guide;

@@ -7,6 +7,7 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import type { BoardFitMode } from "./board/cameraConfig";
 import Monopoly3DScene from "./Board3D";
 import DiceRoller3D from "./DiceRoller3D";
+import RemoteDiceOverlay from "./RemoteDiceOverlay";
 import { BuyModal, JailModal } from "./GameModals";
 import { useGame } from "../_context/GameContext";
 import { useOptionalRoom } from "../_context/RoomContext";
@@ -241,6 +242,9 @@ export default function GameBoard() {
         ) : (
           <WinnerModal winner={winner} />
         ))}
+
+      {/* Xúc xắc của người khác / bot đang lắc */}
+      <RemoteDiceOverlay />
 
       {/* Bộ Lắc Xúc Xắc: luôn ở giữa bàn cờ (điện thoại thu nhỏ lại để không che ô) */}
       {canRoll && (

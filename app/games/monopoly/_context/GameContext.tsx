@@ -30,6 +30,7 @@ import { generateInitialBoard } from "../_components/boardConfig";
 import { buildStepDurations } from "../_components/board/anim/stepTimeline";
 import { getMoveSpeed } from "../_components/board/anim/animSettings";
 import { clearMoveHint, setMoveHint } from "../_components/board/anim/moveBus";
+import { DICE_SHOW_MS, showDice } from "../_components/board/anim/diceBus";
 import { ECONOMY_BASE, Economy, makeEconomy, roundMoney } from "./economy";
 import {
   CHANCE_CARDS,
@@ -39,6 +40,15 @@ import {
   shuffleCards,
 } from "../_components/constants";
 import { getTileSellValue } from "../_components/SellPropertyModal";
+import {
+  chooseBuy,
+  chooseFestival,
+  chooseRps as botRpsPick,
+  chooseTravel,
+  chooseXoc as botXocPick,
+  shouldPayBail,
+  type BotView,
+} from "../_lib/bot";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -90,6 +100,8 @@ interface GameContextType {
   handleSellTile: (tileId: number) => void;
   handleAutoSellAll: () => void;
   handleSkipBuy: () => void;
+  /** Người lắc báo kết quả ngay lúc xúc xắc bắt đầu xoay (để người khác xem) */
+  announceRoll: (d1: number, d2: number) => void;
   // ---- Online ----
   isOnline: boolean;
   isHost: boolean;
@@ -285,6 +297,7 @@ export const buildOnlinePlayers = (
       userId: rp.userId,
       avatar: rp.avatar,
       money: startingMoney,
+      ...(rp.botLevel ? { botLevel: rp.botLevel } : {}),
     }));
 
 /** Thời điểm hiện tại (tách ra hàm riêng để dùng trong các hàm xử lý sự kiện) */
@@ -1405,13 +1418,31 @@ export function GameProvider({
     return true;
   };
 
+  /**
+   * Host lắc thay (bot / người chơi hết giờ): cho mọi người xem xúc xắc xoay
+   * rồi mới gửi thao tác lắc thật.
+   */
+  const rollForCurrent = () => {
+    const d1 = randomDie();
+    const d2 = randomDie();
+    const p = currPlayer;
+    showDice({ name: p.name, d1, d2 });
+    if (online && p.userId) {
+      void monoEmit("mono:dice", { d1, d2, forUserId: p.userId });
+    }
+    setTimeout(
+      () => latestRef.current.performAction("roll", { d1, d2 }),
+      DICE_SHOW_MS,
+    );
+  };
+
   /** Tự động đi thay khi hết giờ (đi qua cùng cơ chế kiểm tra như người chơi) */
   const autoAct = (phase: TurnPhase) => {
     // Pha đã đổi (người chơi vừa thao tác kịp) -> không làm gì
     if (phase === "none" || phase !== turnPhase) return;
     switch (phase) {
       case "roll": {
-        performAction("roll", { d1: randomDie(), d2: randomDie() });
+        rollForCurrent();
         return;
       }
       case "buy":
@@ -1432,6 +1463,77 @@ export function GameProvider({
         return;
       }
     }
+  };
+
+  // =====================================================================
+  // BOT (host điều khiển quân của bot qua cùng performAction như người chơi)
+  // =====================================================================
+  const botView = (me: Player): BotView => ({
+    board,
+    players,
+    me,
+    rentOf: calculateTileRent,
+    startingMoney: online?.settings.startingMoney ?? 10000,
+    level: me.botLevel ?? "normal",
+  });
+
+  const botAct = (phase: TurnPhase) => {
+    if (phase === "none" || phase !== turnPhase || !currPlayer.botLevel) return;
+    const v = botView(currPlayer);
+    switch (phase) {
+      case "roll":
+        if (
+          currPlayer.inJail &&
+          currPlayer.jailTurns > 0 &&
+          shouldPayBail(v, economy.jailBail)
+        ) {
+          performAction("payBail");
+          return;
+        }
+        rollForCurrent();
+        return;
+      case "buy": {
+        const level = chooseBuy(v, currentTile);
+        if (level) performAction("buy", { level });
+        else performAction("skipBuy");
+        return;
+      }
+      case "festival": {
+        const tileId = chooseFestival(v);
+        if (tileId !== null) performAction("festivalSelect", { tileId });
+        else performAction("festivalSkip");
+        return;
+      }
+      case "sell":
+        performAction("autoSell");
+        return;
+      case "travel":
+        performAction("travel", { tileId: chooseTravel(v) });
+        return;
+    }
+  };
+
+  /** Bot tham gia mini game (Oẳn tù tì / Chẵn lẻ) */
+  const botMiniGames = () => {
+    if (rpsGame?.phase === "choosing") {
+      for (const id of rpsGame.participants) {
+        const p = players.find((x) => x.id === id);
+        if (p?.botLevel && !rpsGame.chosen.includes(id)) {
+          chooseRps(id, botRpsPick());
+          return true;
+        }
+      }
+    }
+    if (xocGame?.phase === "guessing") {
+      for (const id of xocGame.participants) {
+        const p = players.find((x) => x.id === id);
+        if (p?.botLevel && !xocGame.guesses[id]) {
+          guessXoc(id, botXocPick(p.money, economy.xocStake));
+          return true;
+        }
+      }
+    }
+    return false;
   };
 
   // =====================================================================
@@ -1790,6 +1892,8 @@ export function GameProvider({
     performAction,
     forfeitPlayer,
     autoAct,
+    botAct,
+    botMiniGames,
     cardSeq,
   });
   useEffect(() => {
@@ -1805,6 +1909,8 @@ export function GameProvider({
       performAction,
       forfeitPlayer,
       autoAct,
+      botAct,
+      botMiniGames,
       cardSeq,
     };
   });
@@ -1889,6 +1995,10 @@ export function GameProvider({
       if (l.currPlayer.userId !== msg.userId) return;
       l.performAction(msg.type, msg.payload);
     };
+    const onDice = (msg: { userId: string; d1: number; d2: number }) => {
+      const p = latestRef.current.players.find((x) => x.userId === msg.userId);
+      if (p) showDice({ name: p.name, d1: msg.d1, d2: msg.d2 });
+    };
     const onPlayerLeft = (data: { userId: string }) => {
       if (latestRef.current.isHost)
         latestRef.current.forfeitPlayer(data.userId);
@@ -1897,6 +2007,7 @@ export function GameProvider({
     socket.on("mono:state", onState);
     socket.on("connect", onReconnect);
     socket.on("mono:action", onAction);
+    socket.on("mono:dice", onDice);
     socket.on("mono:playerLeft", onPlayerLeft);
 
     // Vừa vào bàn cờ -> lấy trạng thái mới nhất từ server
@@ -1905,6 +2016,7 @@ export function GameProvider({
       socket.off("mono:state", onState);
       socket.off("connect", onReconnect);
       socket.off("mono:action", onAction);
+      socket.off("mono:dice", onDice);
       socket.off("mono:playerLeft", onPlayerLeft);
     };
   }, [isOnline]);
@@ -2042,6 +2154,34 @@ export function GameProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, isHost, phaseKey]);
 
+  // Bot tới lượt (host): nghĩ một chút rồi đi — mỗi bước của lượt 1 thao tác
+  const botKey = currPlayer.botLevel
+    ? `${phaseKey}:${currPlayer.inJail}:${currPlayer.money}`
+    : "";
+  useEffect(() => {
+    if (!isOnline || !isHost || !botKey || turnPhase === "none") return;
+    const delay = turnPhase === "roll" ? 1000 : 1500;
+    const timer = setTimeout(
+      () => latestRef.current.botAct(turnPhase),
+      delay,
+    );
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline, isHost, botKey]);
+
+  // Bot chọn trong mini game (mỗi bot 1 lần, cách nhau một chút cho tự nhiên)
+  const miniKey = `${rpsGame?.id ?? ""}:${rpsGame?.phase ?? ""}:${rpsGame?.chosen.length ?? 0}|${xocGame?.id ?? ""}:${xocGame?.phase ?? ""}:${xocGame ? Object.keys(xocGame.guesses).length : 0}`;
+  useEffect(() => {
+    if (!isOnline || !isHost || (!rpsGame && !xocGame)) return;
+    if (!players.some((p) => p.botLevel && !p.isBankrupt)) return;
+    const timer = setTimeout(
+      () => latestRef.current.botMiniGames(),
+      900 + Math.random() * 1400,
+    );
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline, isHost, miniKey]);
+
   // Vừa được nhận quyền host giữa trận -> gỡ các trạng thái đang dở dang
   const wasHostRef = useRef(isHost);
   useEffect(() => {
@@ -2108,6 +2248,9 @@ export function GameProvider({
         handleTravelToTile: async (tileId) => sendAction("travel", { tileId }),
         handleRollComplete: async (_total, d1, d2) =>
           sendAction("roll", { d1, d2 }),
+        announceRoll: (d1, d2) => {
+          if (online && isMyTurn) void monoEmit("mono:dice", { d1, d2 });
+        },
         handleBuyProperty: (level) => sendAction("buy", { level }),
         handleFestivalSelect: (tileId) =>
           sendAction("festivalSelect", { tileId }),
