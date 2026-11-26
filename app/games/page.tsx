@@ -7,21 +7,22 @@ import {
   CircleDot,
   Crown,
   Dices,
-  Gamepad2,
   Grid3x3,
-  Hourglass,
+  KeyRound,
   Layers,
-  Play,
   Search,
-  SearchX,
   Target,
-  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
 import MainLayout from "@/components/layout/MainLayout";
-import DongSonDrum from "@/components/ui/DongSonDrum";
-import { ui } from "@/components/ui/styles";
+import {
+  TOY_COLORS,
+  ToyButton,
+  ToyKeyframes,
+  toyFont,
+  type ToyColor,
+} from "./monopoly/_components/ui/ToyUI";
 
 export interface GameItem {
   id: string;
@@ -33,7 +34,16 @@ export interface GameItem {
   bannerBg: string;
   isAvailable: boolean;
   slug: string;
+  /** Màu nhấn của thẻ (bảng màu "đồ chơi") */
+  accent: ToyColor;
+  /** Hình minh hoạ lớn trên banner + hình phụ */
+  emoji: string;
+  emoji2: string;
 }
+
+const CREAM = "linear-gradient(180deg, #fffaf0 0%, #fff1dc 100%)";
+const INK = "#2b2f48";
+const MUTED = "#7a7f95";
 
 const GAMES_LIST: GameItem[] = [
   {
@@ -47,6 +57,9 @@ const GAMES_LIST: GameItem[] = [
     bannerBg: "from-[#7f1118] via-[#c81d25] to-[#e8772e]",
     isAvailable: true,
     slug: "/games/monopoly",
+    accent: "orange",
+    emoji: "🎲",
+    emoji2: "🏠",
   },
   {
     id: "5",
@@ -59,6 +72,9 @@ const GAMES_LIST: GameItem[] = [
     bannerBg: "from-[#0b4d3a] via-[#11704f] to-[#c2621f]",
     isAvailable: true,
     slug: "/games/billiard",
+    accent: "green",
+    emoji: "⚪",
+    emoji2: "🔴",
   },
   {
     id: "6",
@@ -71,6 +87,24 @@ const GAMES_LIST: GameItem[] = [
     bannerBg: "from-[#0b3d2e] via-[#0f6b52] to-[#7f1118]",
     isAvailable: true,
     slug: "/games/pool",
+    accent: "blue",
+    emoji: "🎱",
+    emoji2: "🎯",
+  },
+  {
+    id: "7",
+    title: "Prison Break – Last Chance",
+    description:
+      "Vượt ngục 2D: né lính gác, lục soát, chế tạo, giải cứu đồng đội. Chơi đơn hoặc co-op 4 người — chỉ thắng khi cả đội cùng thoát.",
+    category: "Hành động & Co-op",
+    players: "1 - 4 người",
+    icon: KeyRound,
+    bannerBg: "from-[#0f172a] via-[#334155] to-[#7f1118]",
+    isAvailable: true,
+    slug: "/games/prison",
+    accent: "red",
+    emoji: "🔑",
+    emoji2: "🚔",
   },
   {
     id: "1",
@@ -83,6 +117,9 @@ const GAMES_LIST: GameItem[] = [
     bannerBg: "from-[#1d2347] to-[#3a3f6b]",
     isAvailable: true,
     slug: "/games/caro",
+    accent: "purple",
+    emoji: "⭕",
+    emoji2: "❌",
   },
   {
     id: "3",
@@ -95,6 +132,9 @@ const GAMES_LIST: GameItem[] = [
     bannerBg: "from-[#2a1d12] to-[#6b4a1f]",
     isAvailable: false,
     slug: "/games/chess",
+    accent: "gold",
+    emoji: "♟️",
+    emoji2: "👑",
   },
   {
     id: "4",
@@ -107,145 +147,288 @@ const GAMES_LIST: GameItem[] = [
     bannerBg: "from-[#3b1530] to-[#6b2a3f]",
     isAvailable: false,
     slug: "/games/uno",
+    accent: "pink",
+    emoji: "🃏",
+    emoji2: "🎉",
   },
 ];
 
+const ALL = "Tất cả";
+
+function GameCard({ game, index }: { game: GameItem; index: number }) {
+  const c = TOY_COLORS[game.isAvailable ? game.accent : "gray"];
+  const Icon = game.icon;
+  const card = (
+    <article
+      className={`toy-pop group relative flex h-full flex-col overflow-hidden rounded-[18px] transition duration-300 ${
+        game.isAvailable ? "cursor-pointer hover:-translate-y-1.5" : ""
+      }`}
+      style={{
+        background: CREAM,
+        border: `3px solid ${c.main}`,
+        boxShadow: `0 4px 0 ${c.dark}, 0 8px 18px rgba(0,0,0,0.28)`,
+        color: INK,
+        animationDelay: `${index * 0.06}s`,
+      }}
+    >
+      {/* Banner */}
+      <div
+        className={`relative flex h-[72px] items-center justify-center overflow-hidden bg-linear-to-br ${game.bannerBg} ${
+          game.isAvailable ? "" : "grayscale-[60%]"
+        }`}
+      >
+        {/* chấm bi trang trí */}
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-20"
+          style={{
+            backgroundImage:
+              "radial-gradient(rgba(255,255,255,.55) 1.5px, transparent 1.6px)",
+            backgroundSize: "18px 18px",
+          }}
+        />
+        <span
+          aria-hidden
+          className="absolute -bottom-2 -left-1 rotate-[-14deg] text-2xl opacity-40 transition duration-500 group-hover:rotate-0"
+        >
+          {game.emoji2}
+        </span>
+        <Icon
+          aria-hidden
+          className="absolute -right-3 -top-3 h-12 w-12 text-white/15 transition duration-700 group-hover:rotate-12"
+          strokeWidth={1.4}
+        />
+        <span
+          className="toy-bob relative flex h-11 w-11 items-center justify-center rounded-full text-xl transition-transform duration-300 group-hover:scale-110"
+          style={{
+            background: `radial-gradient(circle at 35% 30%, #fff, ${c.soft} 45%, ${c.main})`,
+            border: "3px solid #fffaf0",
+            boxShadow: `0 3px 0 ${c.dark}, 0 6px 12px rgba(0,0,0,.3)`,
+            animationDelay: `${index * 0.3}s`,
+          }}
+        >
+          {game.emoji}
+        </span>
+        {!game.isAvailable && (
+          <span
+            className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] text-white"
+            style={{ background: "rgba(0,0,0,.45)" }}
+          >
+            🔒 Sắp ra mắt
+          </span>
+        )}
+      </div>
+
+      {/* Tên */}
+      <h3
+        className="truncate px-2 py-2 text-center text-sm leading-tight"
+        style={{ color: c.dark }}
+        title={game.title}
+      >
+        {game.title}
+      </h3>
+    </article>
+  );
+  return game.isAvailable ? (
+    <Link href={game.slug} aria-label={`Chơi ${game.title}`} className="block">
+      {card}
+    </Link>
+  ) : (
+    card
+  );
+}
+
 export default function GamesPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [category, setCategory] = useState(ALL);
+
+  const categories = useMemo(
+    () => [ALL, ...new Set(GAMES_LIST.map((g) => g.category))],
+    [],
+  );
 
   const filteredGames = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return GAMES_LIST.filter((g) => g.title.toLowerCase().includes(q));
-  }, [searchQuery]);
+    return GAMES_LIST.filter(
+      (g) =>
+        (category === ALL || g.category === category) &&
+        (g.title.toLowerCase().includes(q) ||
+          g.category.toLowerCase().includes(q)),
+    ).sort((a, b) => Number(b.isAvailable) - Number(a.isAvailable));
+  }, [searchQuery, category]);
+
+  const playable = GAMES_LIST.filter((g) => g.isAvailable).length;
 
   return (
     <MainLayout>
-      <div className="mx-auto w-full max-w-6xl space-y-6 px-3 py-5 text-white sm:px-6 sm:py-8 md:space-y-8">
-        {/* Tiêu đề + tìm kiếm */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <Link
-              href="/"
-              className={`${ui.btnGhost} -ml-2 mb-2 px-3! py-1.5! text-sm`}
+      <div
+        className={`${toyFont.className} relative min-h-full overflow-hidden text-white`}
+      >
+        <ToyKeyframes />
+        {/* Nền: quầng sáng & biểu tượng mờ */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-hidden"
+        >
+          <div className="absolute -left-24 top-10 h-80 w-80 rounded-full bg-[#3a5bd9]/25 blur-[110px]" />
+          <div className="absolute -right-24 top-1/3 h-96 w-96 rounded-full bg-[#ff8a3d]/15 blur-[120px]" />
+          <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-[#ff5c9a]/10 blur-[110px]" />
+          {["🎲", "🎱", "♟️", "⭕", "🃏", "🔑", "🏆", "🎯"].map((e, i) => (
+            <span
+              key={i}
+              className="toy-bob absolute select-none text-5xl opacity-[0.08] sm:text-6xl"
+              style={{
+                left: `${[3, 90, 8, 84, 46, 95, 30, 70][i]}%`,
+                top: `${[14, 6, 62, 48, 94, 82, 36, 22][i]}%`,
+                animationDelay: `${i * 0.4}s`,
+              }}
             >
-              <ArrowLeft className="h-4 w-4" /> Trang chính
-            </Link>
-            <h1 className="flex items-center gap-3 text-2xl font-extrabold sm:text-3xl">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#c81d25] to-[#e8772e] shadow-[0_4px_0_#7f1118]">
-                <Gamepad2 className="h-6 w-6" />
-              </span>
-              <span className={ui.goldText}>Khu Vực Trò Chơi</span>
-            </h1>
-            <p className="mt-2 text-sm text-slate-400">
-              Thách đấu và giải trí cùng bạn bè trực tuyến ngay trên Chat Zone
-            </p>
-          </div>
-
-          <div className={`${ui.field} w-full py-2.5 md:w-80`}>
-            <Search className="h-4 w-4 shrink-0 text-[#f4b942]/80" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm trò chơi (Caro, Cờ tỷ phú…)"
-              aria-label="Tìm trò chơi"
-              className="w-full min-w-0 bg-transparent text-[15px] text-white outline-none placeholder:text-slate-500"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                aria-label="Xoá tìm kiếm"
-                className="shrink-0 rounded-lg p-1 text-slate-400 hover:text-white"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+              {e}
+            </span>
+          ))}
         </div>
 
-        {filteredGames.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
-            {filteredGames.map((game) => {
-              const Icon = game.icon;
-              return (
-                <div
-                  key={game.id}
-                  className={`group flex flex-col overflow-hidden transition duration-300 ${ui.card} ${
-                    game.isAvailable
-                      ? "hover:-translate-y-1 hover:border-[#f4b942]/50"
-                      : "opacity-80"
-                  }`}
+        <div className="relative mx-auto w-full max-w-6xl space-y-6 px-3 py-5 sm:px-6 sm:py-8 md:space-y-8">
+          {/* Tiêu đề + tìm kiếm */}
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <Link
+                href="/"
+                className="-ml-1 mb-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-[#fff1dc]/80 transition hover:bg-white/10 hover:text-white"
+              >
+                <ArrowLeft className="h-4 w-4" /> Trang chính
+              </Link>
+              <h1 className="flex items-center gap-3 text-3xl sm:text-4xl">
+                <span
+                  className="toy-wiggle flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-3xl"
+                  style={{
+                    background: `radial-gradient(circle at 35% 30%, #fff, ${TOY_COLORS.gold.soft} 45%, ${TOY_COLORS.gold.main})`,
+                    boxShadow: `0 5px 0 ${TOY_COLORS.gold.dark}`,
+                  }}
                 >
-                  {/* Banner */}
-                  <div
-                    className={`relative flex h-32 items-center justify-center overflow-hidden bg-linear-to-br sm:h-36 ${game.bannerBg}`}
-                  >
-                    <DongSonDrum className="absolute -right-16 -top-16 h-56 w-56 text-[#ffd166]/15 transition-transform duration-700 group-hover:rotate-45" />
-                    <Icon
-                      className="relative h-16 w-16 text-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-transform duration-300 group-hover:scale-110"
-                      strokeWidth={1.6}
-                    />
-                    <span className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/35 px-3 py-1 text-xs font-semibold text-[#ffd166] backdrop-blur-md">
-                      {game.category}
-                    </span>
-                    <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full border border-white/15 bg-black/35 px-3 py-1 text-xs text-white/85 backdrop-blur-md">
-                      <Users className="h-3.5 w-3.5" /> {game.players}
-                    </span>
-                  </div>
+                  🎮
+                </span>
+                <span
+                  style={{
+                    color: "#ffd166",
+                    textShadow: `0 3px 0 ${TOY_COLORS.orange.dark}, 0 6px 14px rgba(0,0,0,.35)`,
+                  }}
+                >
+                  Khu Vực Trò Chơi
+                </span>
+              </h1>
+              <p className="mt-2 text-sm text-[#fff1dc]/70">
+                {playable} trò chơi đang mở — thách đấu bạn bè hoặc luyện tập
+                với bot ngay trên Chat Zone
+              </p>
+            </div>
 
-                  {/* Nội dung */}
-                  <div className="flex flex-1 flex-col justify-between gap-4 p-5">
-                    <div>
-                      <h3 className="text-lg font-bold transition group-hover:text-[#ffd166] sm:text-xl">
-                        {game.title}
-                      </h3>
-                      <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-400">
-                        {game.description}
-                      </p>
-                    </div>
+            <label
+              className="flex w-full items-center gap-2 rounded-full px-4 py-2.5 md:w-80"
+              style={{
+                background: CREAM,
+                border: "3px solid #f0e3cc",
+                boxShadow: "0 4px 0 #e3d3b5",
+                color: INK,
+              }}
+            >
+              <Search
+                className="h-4 w-4 shrink-0"
+                style={{ color: TOY_COLORS.orange.main }}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tìm trò chơi (Caro, Cờ tỷ phú…)"
+                aria-label="Tìm trò chơi"
+                className="w-full min-w-0 bg-transparent text-[15px] outline-none placeholder:text-[#a8a293]"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Xoá tìm kiếm"
+                  className="shrink-0 rounded-full p-1 transition hover:bg-black/5"
+                  style={{ color: MUTED }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </label>
+          </div>
 
-                    {game.isAvailable ? (
-                      <Link
-                        href={game.slug}
-                        className={`${ui.btnPrimary} w-full`}
-                      >
-                        <Play className="h-4 w-4 fill-current" /> Chơi ngay
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled
-                        className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] py-3 font-semibold text-slate-500"
-                      >
-                        <Hourglass className="h-4 w-4" /> Sắp ra mắt
-                      </button>
-                    )}
-                  </div>
-                </div>
+          {/* Lọc theo thể loại */}
+          <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:flex-wrap sm:px-0">
+            {categories.map((cat) => {
+              const active = cat === category;
+              const c = TOY_COLORS.orange;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setCategory(cat)}
+                  className="shrink-0 rounded-full px-4 py-1.5 text-sm transition active:translate-y-[3px]"
+                  style={
+                    active
+                      ? {
+                          background: `linear-gradient(180deg, ${c.main}, ${c.dark} 130%)`,
+                          boxShadow: `0 4px 0 ${c.dark}`,
+                          color: "#fff",
+                          textShadow: "0 1px 0 rgba(0,0,0,.2)",
+                        }
+                      : {
+                          background: "rgba(255,250,240,0.1)",
+                          border: "2px solid rgba(255,241,220,0.2)",
+                          color: "#fff1dc",
+                        }
+                  }
+                >
+                  {cat}
+                </button>
               );
             })}
           </div>
-        ) : (
-          <div
-            className={`flex flex-col items-center justify-center space-y-3 p-10 text-center sm:p-12 ${ui.card}`}
-          >
-            <SearchX className="h-12 w-12 text-[#f4b942]" />
-            <h3 className="text-lg font-bold">Không tìm thấy trò chơi nào</h3>
-            <p className="max-w-md text-sm text-slate-400">
-              Không có game nào khớp với từ khoá &quot;
-              <span className="text-[#ffd166]">{searchQuery}</span>&quot;. Thử
-              tìm với tên khác xem sao!
-            </p>
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className={`${ui.btnGold} mt-2 px-4! py-2! text-sm`}
+
+          {filteredGames.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {filteredGames.map((game, i) => (
+                <GameCard key={game.id} game={game} index={i} />
+              ))}
+            </div>
+          ) : (
+            <div
+              className="toy-pop mx-auto flex max-w-md flex-col items-center gap-3 rounded-[28px] p-8 text-center"
+              style={{
+                background: CREAM,
+                border: `4px solid ${TOY_COLORS.gold.main}`,
+                boxShadow: `0 7px 0 ${TOY_COLORS.gold.dark}`,
+                color: INK,
+              }}
             >
-              Xoá bộ lọc
-            </button>
-          </div>
-        )}
+              <span className="text-5xl">🔍</span>
+              <h3 className="text-lg" style={{ color: TOY_COLORS.gold.dark }}>
+                Không tìm thấy trò chơi nào
+              </h3>
+              <p className="text-sm" style={{ color: MUTED }}>
+                Không có game nào khớp với &quot;
+                <b style={{ color: INK }}>{searchQuery || category}</b>&quot;.
+                Thử tìm với tên khác xem sao!
+              </p>
+              <ToyButton
+                color="gold"
+                block={false}
+                onClick={() => {
+                  setSearchQuery("");
+                  setCategory(ALL);
+                }}
+              >
+                <span className="mx-auto">Xoá bộ lọc</span>
+              </ToyButton>
+            </div>
+          )}
+        </div>
       </div>
     </MainLayout>
   );

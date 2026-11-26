@@ -32,14 +32,40 @@ test("2.4 — lag shot (đầu bàn -> băng cuối -> về sát băng đầu) c
   assert.ok(lag >= 1.4 && lag <= 2.0, `tốc độ lag ${lag.toFixed(2)} m/s`);
 });
 
-test("2.4 — đánh trung bình 3 m/s: bi lăn ~4 chiều dài bàn", () => {
+test("2.4 — đánh trung bình 3 m/s: bi lăn ~3–4 chiều dài bàn", () => {
+  // Băng "ăn" năng lượng như bàn thật nên mốc dưới là 3.0 (trước khi giảm độ nảy băng: 3.7)
   const lengths = rollFromHead(3).dist / C.tableLength;
-  assert.ok(lengths >= 3.7 && lengths <= 5.2, `${lengths.toFixed(2)} chiều bàn`);
+  assert.ok(lengths >= 3.0 && lengths <= 5.2, `${lengths.toFixed(2)} chiều bàn`);
 });
 
-test("2.4 — cú phá mạnh (lực 90%) cho bi cái 9–11 m/s", () => {
+/** Bi lăn thẳng góc vào băng dài: tỉ số tốc độ ngay sau va chạm và khi đã lăn lại */
+function perpRebound(v0: number) {
+  const sim = new PoolSim([{ n: 0, x: 0.3, y: -0.55 }]);
+  sim.strike(shot(v0, { dirX: 0, dirY: 1 }));
+  while (sim.isMoving()) {
+    const vin = sim.balls[0].v.y;
+    sim.step();
+    const b = sim.balls[0];
+    if (vin > 0 && b.v.y < 0) {
+      const imm = -b.v.y / vin;
+      while (sim.isMoving() && sim.balls[0].state === "sliding") sim.step();
+      return { imm, roll: Math.hypot(sim.balls[0].v.x, sim.balls[0].v.y) / vin };
+    }
+  }
+  return { imm: NaN, roll: NaN };
+}
+
+test("2.4 — băng không 'nảy': bi lăn vào băng luôn bật ra chậm hơn lúc vào", () => {
+  for (const v of [0.8, 1.5, 3]) {
+    const r = perpRebound(v);
+    assert.ok(r.imm < 0.93, `${v} m/s: ngay sau băng còn ${(r.imm * 100).toFixed(0)}% tốc độ`);
+    assert.ok(r.roll > 0.55 && r.roll < 0.72, `${v} m/s: lăn lại còn ${(r.roll * 100).toFixed(0)}% tốc độ`);
+  }
+});
+
+test("2.4 — cú phá mạnh (lực 90%) cho bi cái ~7–8 m/s (lực = 3/4 bản cũ 9–11 m/s)", () => {
   const v = powerToSpeed(0.9, C);
-  assert.ok(v >= 9 && v <= 11, `${v.toFixed(2)} m/s`);
+  assert.ok(v >= 6.75 && v <= 8.25, `${v.toFixed(2)} m/s`);
 });
 
 test("2.4 — bi lăn vào băng 45°: đường bật ra ngắn hơn 45° vài độ", () => {

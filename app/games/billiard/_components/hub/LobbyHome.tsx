@@ -160,7 +160,7 @@ function QuickMatchModal({ open, onClose }: { open: boolean; onClose: () => void
   const selected = (rules.find((r) => r.target === want) ?? rules[0])?.id ?? "";
   return (
     <Modal open={open} onClose={onClose} title="Tìm trận nhanh">
-      <p className="mb-3 text-sm text-slate-400">Chọn thể loại bida (trận chạm 15 điểm). Hệ thống ghép bạn với người có trình độ tương đương ở thể loại đó; không ảnh hưởng điểm xếp hạng.</p>
+      <p className="mb-3 text-sm text-slate-400">Chọn thể loại bida (trận chạm 15 điểm). Hệ thống ghép bạn với người đang tìm trận cùng thể loại (không cần cùng trình độ); không ảnh hưởng điểm xếp hạng.</p>
       <DisciplinePicker value={discipline} onChange={setDiscipline} />
       <TargetChoice rules={rules} selected={selected} onPick={setTarget} accent="emerald" />
       <button
@@ -218,7 +218,7 @@ function GameModes() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <ModeCard
           title="QUICK MATCH"
-          desc="Tìm đối thủ tự động theo trình độ, chơi ngay."
+          desc="Tìm đối thủ tự động, ai đang chờ là ghép ngay — không cần cùng trình độ."
           icon={<Zap className="h-6 w-6" />}
           accent="bg-emerald-600"
           stat={summary ? `${summary.queue.QUICK} người đang tìm trận` : undefined}
@@ -229,7 +229,7 @@ function GameModes() {
         />
         <ModeCard
           title="RANKED MATCH"
-          desc="Đấu xếp hạng Libre hoặc 3 băng — mỗi thể loại một bảng xếp hạng riêng."
+          desc="Đấu xếp hạng Libre hoặc 3 băng — ghép ngay với người đang chờ, mỗi thể loại một bảng xếp hạng riêng."
           icon={<Crown className="h-6 w-6" />}
           accent="bg-[#c8941d]"
           stat={summary ? `${summary.queue.RANKED} người đang tìm · Libre ${profile?.ladders.free.rating ?? "—"} · 3 băng ${profile?.ladders.three.rating ?? "—"}` : undefined}

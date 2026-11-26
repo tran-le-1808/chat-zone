@@ -1,4 +1,4 @@
-import { POOL_TABLE } from "../physics/table";
+import { tableOfSize } from "../physics/table";
 import type { ShotResult } from "../physics/types";
 import {
   GROUP_LABEL,
@@ -69,7 +69,7 @@ export function resolveEight(
       return {
         rack: {
           ...base,
-          balls: ensureCue(res.final, true),
+          balls: ensureCue(res.final, true, rack.size),
           turn: opp,
           isBreak: false,
           openTable: true,
@@ -125,7 +125,7 @@ export function resolveEight(
     foul = `Chạm sai bi đầu tiên (bi ${fh}, không thuộc ${GROUP_LABEL[myGroup!]})`;
   else if (rack.restrictToFrontOfHeadString) {
     const start = rack.balls.find((b) => b.n === fh);
-    if (start && start.x <= POOL_TABLE.headStringX)
+    if (start && start.x <= tableOfSize(rack.size).headStringX)
       foul = `Bi ${fh} nằm sau vạch đầu bàn — không được nhắm khi có bi trong tay sau vạch`;
   }
   if (!foul && pots.length === 0 && res.cushionAfterContact.length === 0)
@@ -141,7 +141,7 @@ export function resolveEight(
   // ---- Bi 8 vào lỗ: thắng hoặc thua ngay ----
   if (eightIn) {
     const pocket8 = res.pocketed.find((p) => p.ball === 8)!.pocket;
-    const name8 = POOL_TABLE.pockets[pocket8].name.toLowerCase();
+    const name8 = tableOfSize(rack.size).pockets[pocket8].name.toLowerCase();
     let lose: string | null = null;
     if (foul) lose = `Đưa bi 8 vào lỗ khi phạm lỗi (${foul.toLowerCase()})`;
     else if (rack.openTable || !cleared) lose = "Đưa bi 8 vào lỗ khi chưa sạch nhóm";
@@ -172,7 +172,7 @@ export function resolveEight(
     return {
       rack: {
         ...base,
-        balls: ensureCue(res.final, false),
+        balls: ensureCue(res.final, false, rack.size),
         turn: opp,
         ballInHand: "table",
       },
@@ -205,7 +205,7 @@ export function resolveEight(
     messages.push(
       msg(
         "good",
-        `Bi ${call!.ball} vào lỗ ${POOL_TABLE.pockets[call!.pocket].name.toLowerCase()} — ${me} đánh tiếp`,
+        `Bi ${call!.ball} vào lỗ ${tableOfSize(rack.size).pockets[call!.pocket].name.toLowerCase()} — ${me} đánh tiếp`,
       ),
     );
   } else if (pots.length) {

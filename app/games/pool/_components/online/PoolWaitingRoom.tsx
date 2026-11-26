@@ -7,7 +7,7 @@ import { useRoom } from "../../../monopoly/_context/RoomContext";
 import PlayerAvatar from "../../../monopoly/_components/PlayerAvatar";
 import { VoiceBadge } from "../../../monopoly/_components/VoiceControls";
 import WaitingRoomShell, { OptionGroup, RuleChip, SeatStatus } from "../../../_shared/WaitingRoomShell";
-import { POCKET_PRESETS, type PocketPreset } from "../../_lib/physics/config";
+import { POCKET_PRESETS, TABLE_SIZES, TABLE_SIZE_ORDER, type PocketPreset, type TableSize } from "../../_lib/physics/config";
 import { MiniBall } from "../PoolControls";
 
 export interface PoolRoomSettingsUI {
@@ -16,6 +16,8 @@ export interface PoolRoomSettingsUI {
   raceTo: number;
   breakRule: "alternate" | "winner";
   pocketPreset: PocketPreset;
+  /** Cỡ bàn (phòng cũ không có -> 9 feet) */
+  tableSize?: TableSize;
   shotClock: boolean;
   allowFullGuide: boolean;
   autoCall: boolean;
@@ -106,6 +108,7 @@ export default function PoolWaitingRoom() {
     <>
       <RuleChip icon={Target}>{s.type === "eight" ? "8 bi" : "9 bi"}</RuleChip>
       <RuleChip icon={Flag}>Chạm {s.raceTo}</RuleChip>
+      <RuleChip icon={Target}>Bàn {TABLE_SIZES[s.tableSize ?? "9ft"].label}</RuleChip>
       <RuleChip icon={Timer}>{s.shotClock ? "30 giây/cú" : "Không giới hạn"}</RuleChip>
       {s.ranked && <RuleChip icon={Trophy}>Xếp hạng</RuleChip>}
       <RuleChip icon={s.isPrivate ? Lock : Globe}>{s.isPrivate ? "Riêng tư" : "Công khai"}</RuleChip>
@@ -144,6 +147,19 @@ export default function PoolWaitingRoom() {
           { value: "winner", label: "Thắng ván phá" },
         ]}
         onChange={(v) => void updateSettings({ breakRule: v })}
+      />
+      <OptionGroup
+        label="Cỡ bàn"
+        icon={Target}
+        cols={3}
+        disabled={!host}
+        value={s.tableSize ?? "9ft"}
+        options={TABLE_SIZE_ORDER.map((k) => ({
+          value: k,
+          label: TABLE_SIZES[k].label,
+          hint: `${Math.round(TABLE_SIZES[k].length * 100)} × ${Math.round(TABLE_SIZES[k].width * 100)} cm`,
+        }))}
+        onChange={(v) => void updateSettings({ tableSize: v })}
       />
       <OptionGroup
         label="Độ khó lỗ"

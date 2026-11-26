@@ -3,6 +3,7 @@ import { resolveEight } from "./eightBall";
 import { resolveNine } from "./nineBall";
 import { ensureCue, msg, offTableText, other, respot } from "./common";
 import { defaultCueSpot, rackFor, withCueAt } from "./rack";
+import type { TableSize } from "../physics/config";
 import type {
   DecisionChoice,
   GameType,
@@ -15,11 +16,12 @@ import type {
 } from "./types";
 
 /** Ván mới: xếp bi theo luật, bi cái trong tay sau vạch đầu bàn để phá */
-export function newRack(type: GameType, breaker: PlayerIndex, seed: number): RackState {
-  const balls = rackFor(type, seed);
-  const cue = defaultCueSpot(balls, true);
+export function newRack(type: GameType, breaker: PlayerIndex, seed: number, size?: TableSize): RackState {
+  const balls = rackFor(type, seed, size);
+  const cue = defaultCueSpot(balls, true, size);
   return {
     type,
+    ...(size && size !== "9ft" ? { size } : {}),
     balls: withCueAt(balls, cue.x, cue.y),
     turn: breaker,
     breaker,
@@ -94,7 +96,7 @@ export function applyTimeoutFoul(rack: RackState, names: [string, string]): { ra
       restrictToFrontOfHeadString: false,
       pushOutAvailable: false,
       shotNo: rack.shotNo + 1,
-      balls: ensureCue(rack.balls, false),
+      balls: ensureCue(rack.balls, false, rack.size),
     },
     messages,
   };
@@ -114,7 +116,7 @@ export function resolvePractice(
   for (const p of pots) messages.push(msg("good", `Bi ${p.ball} vào lỗ ${pocketName(p.pocket)}`));
   const cueGone = res.scratch || res.offTable.includes(0);
   let balls = res.final;
-  for (const n of res.offTable.filter((x) => x !== 0)) balls = respot(balls, n);
+  for (const n of res.offTable.filter((x) => x !== 0)) balls = respot(balls, n, rack.size);
   if (res.offTable.length)
     messages.push(
       msg("foul", `${offTableText(res)} — ${cueGone ? "đặt lại bi cái" : "bi được đặt lại lên bàn"}`),
@@ -125,7 +127,7 @@ export function resolvePractice(
     messages.push(
       msg("info", res.firstHit === null ? "Bi cái không chạm bi nào" : `Bi cái chạm bi ${res.firstHit} trước`),
     );
-  if (cueGone) balls = ensureCue(balls, false);
+  if (cueGone) balls = ensureCue(balls, false, rack.size);
   return {
     rack: {
       ...rack,
@@ -177,7 +179,7 @@ export function applyDecision(
   const by = d.by;
   const nextSeed = (rack.seed * 1103515245 + 12345) >>> 0;
   const rerack = (breaker: PlayerIndex, text: string) => ({
-    rack: newRack(rack.type, breaker, nextSeed),
+    rack: newRack(rack.type, breaker, nextSeed, rack.size),
     messages: [msg("info", text)],
   });
   const clear = { ...rack, decision: null } as RackState;
@@ -195,11 +197,11 @@ export function applyDecision(
       return rerack(by, `Xếp lại bi — ${names[by]} phá`);
     case "spotAndContinue":
       return {
-        rack: { ...clear, balls: respot(rack.balls, 8), isBreak: false, openTable: true, turn: by },
+        rack: { ...clear, balls: respot(rack.balls, 8, rack.size), isBreak: false, openTable: true, turn: by },
         messages: [msg("info", `Bi 8 được đặt lại — ${names[by]} đánh tiếp, bàn mở`)],
       };
     case "spotWithBallInHand": {
-      const balls = ensureCue(respot(rack.balls, 8), true);
+      const balls = ensureCue(respot(rack.balls, 8, rack.size), true, rack.size);
       return {
         rack: {
           ...clear,
@@ -239,7 +241,7 @@ export interface MatchState {
 export function startMatch(config: MatchConfig, firstBreaker: PlayerIndex = 0): MatchState {
   return {
     config,
-    rack: newRack(config.type, firstBreaker, config.seed),
+    rack: newRack(config.type, firstBreaker, config.seed, config.tableSize),
     score: [0, 0],
     rackNo: 1,
     matchWinner: null,
@@ -265,7 +267,7 @@ export function nextRack(m: MatchState): MatchState {
       ? last.winner
       : other(last.breaker);
   const seed = (m.config.seed + m.rackNo * 7919) >>> 0;
-  return { ...m, rack: newRack(m.config.type, breaker, seed), rackNo: m.rackNo + 1 };
+  return { ...m, rack: newRack(m.config.type, breaker, seed, m.config.tableSize), rackNo: m.rackNo + 1 };
 }
 
 /** Đặt bi cái (bi trong tay) — trả về bàn mới */
