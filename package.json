@@ -16,7 +16,11 @@
     "test:caro": "node --import ./app/games/pool/_tests/register.mjs --test app/games/caro/_tests/*.test.ts",
     "caro:sync-shared": "mkdir -p ../login-system/src/caro/shared && cp app/games/caro/_lib/rules.ts app/games/caro/_lib/engine/book.ts ../login-system/src/caro/shared/ && cd ../login-system && npx prettier --write src/caro/shared/*.ts",
     "test:billiard": "node --import ./app/games/pool/_tests/register.mjs --test app/games/billiard/_tests/*.test.ts",
-    "prison:sync-shared": "node scripts/sync-prison-shared.mjs"
+    "prison:sync-shared": "node scripts/sync-prison-shared.mjs",
+    "test:xiangqi": "node --import ./app/games/pool/_tests/register.mjs --test app/games/xiangqi/_tests/*.test.ts",
+    "test:chess": "node --import ./app/games/pool/_tests/register.mjs --test app/games/chess/_tests/*.test.ts",
+    "chess:sync-shared": "mkdir -p ../login-system/src/chess/shared && cp app/games/chess/_lib/rules.ts ../login-system/src/chess/shared/ && cd ../login-system && npx prettier --write src/chess/shared/*.ts",
+    "xiangqi:sync-shared": "mkdir -p ../login-system/src/xiangqi/shared && cp app/games/xiangqi/_lib/rules.ts ../login-system/src/xiangqi/shared/ && cd ../login-system && npx prettier --write src/xiangqi/shared/*.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
