@@ -20,7 +20,15 @@
     "test:xiangqi": "node --import ./app/games/pool/_tests/register.mjs --test app/games/xiangqi/_tests/*.test.ts",
     "test:chess": "node --import ./app/games/pool/_tests/register.mjs --test app/games/chess/_tests/*.test.ts",
     "chess:sync-shared": "mkdir -p ../login-system/src/chess/shared && cp app/games/chess/_lib/rules.ts ../login-system/src/chess/shared/ && cd ../login-system && npx prettier --write src/chess/shared/*.ts",
-    "xiangqi:sync-shared": "mkdir -p ../login-system/src/xiangqi/shared && cp app/games/xiangqi/_lib/rules.ts ../login-system/src/xiangqi/shared/ && cd ../login-system && npx prettier --write src/xiangqi/shared/*.ts"
+    "test:tienlen": "node --import ./app/games/pool/_tests/register.mjs --test app/games/tienlen/_tests/*.test.ts",
+    "tienlen:sync-shared": "mkdir -p ../login-system/src/tienlen/shared && cp app/games/tienlen/_lib/cards.ts app/games/tienlen/_lib/bot.ts ../login-system/src/tienlen/shared/ && cd ../login-system && npx prettier --write src/tienlen/shared/*.ts",
+    "test:sacmau": "node --import ./app/games/pool/_tests/register.mjs --test app/games/sacmau/_tests/*.test.ts",
+    "sacmau:sync-shared": "mkdir -p ../login-system/src/sacmau/shared && cp app/games/sacmau/_lib/cards.ts app/games/sacmau/_lib/bot.ts ../login-system/src/sacmau/shared/ && cd ../login-system && npx prettier --write src/sacmau/shared/*.ts",
+    "xiangqi:sync-shared": "mkdir -p ../login-system/src/xiangqi/shared && cp app/games/xiangqi/_lib/rules.ts ../login-system/src/xiangqi/shared/ && cd ../login-system && npx prettier --write src/xiangqi/shared/*.ts",
+    "test:masoi": "node --import ./app/games/pool/_tests/register.mjs --test app/games/masoi/_tests/*.test.ts",
+    "masoi:sync-shared": "mkdir -p ../login-system/src/masoi/shared && cp app/games/masoi/_lib/game.ts app/games/masoi/_lib/bot.ts ../login-system/src/masoi/shared/ && cd ../login-system && npx prettier --write src/masoi/shared/*.ts",
+    "test:vedoan": "node --import ./app/games/pool/_tests/register.mjs --test app/games/vedoan/_tests/*.test.ts",
+    "vedoan:sync-shared": "mkdir -p ../login-system/src/vedoan/shared && cp app/games/vedoan/_lib/game.ts app/games/vedoan/_lib/draw.ts app/games/vedoan/_lib/words.ts ../login-system/src/vedoan/shared/ && cd ../login-system && npx prettier --write src/vedoan/shared/*.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -34,6 +34,22 @@ type Signal =
   | { type: "answer"; sdp: RTCSessionDescriptionInit }
   | { type: "ice"; candidate: RTCIceCandidateInit };
 
+/**
+ * Cổng lọc voice theo luật game (vd. Ma Sói: ban đêm chỉ bầy Sói nghe nhau).
+ * Không đặt cổng = ai trong voice cũng nghe / nói với nhau.
+ * Lọc ở cả hai đầu: bên gửi không gửi tiếng tới người không được nghe, bên nhận tắt tiếng người không được nói với mình.
+ */
+export interface VoiceGate {
+  /** Đổi khi luật đổi (giai đoạn, ai còn sống…) */
+  key: string;
+  canSend: (userId: string) => boolean;
+  canHear: (userId: string) => boolean;
+  /** Mình có được nói lúc này không */
+  mic: boolean;
+  /** Mô tả ngắn cho giao diện */
+  label: string;
+}
+
 interface VoiceUser {
   userId: string;
   muted: boolean;
@@ -65,6 +81,9 @@ interface VoiceContextType {
   devices: MediaDeviceInfo[];
   deviceId: string | null;
   selectDevice: (deviceId: string) => Promise<void>;
+  /** Cổng lọc hiện tại (null = không lọc) */
+  gate: VoiceGate | null;
+  setGate: (g: VoiceGate | null) => void;
 }
 
 const VoiceContext = createContext<VoiceContextType | null>(null);
@@ -122,6 +141,37 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const audioElsRef = useRef(new Map<string, HTMLAudioElement>());
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analysersRef = useRef(new Map<string, AnalyserNode>());
+  const gateRef = useRef<VoiceGate | null>(null);
+  const [gate, setGateState] = useState<VoiceGate | null>(null);
+
+  /** Áp cổng lọc cho 1 / mọi kết nối: thay track gửi đi (null = không gửi) và tắt tiếng bên nhận */
+  const applyGate = useCallback((only?: string) => {
+    const g = gateRef.current;
+    const track = localStreamRef.current?.getAudioTracks()[0] ?? null;
+    pcsRef.current.forEach((pc, peerId) => {
+      if (only && peerId !== only) return;
+      const sender =
+        pc
+          .getTransceivers()
+          .find((t) => t.receiver.track?.kind === "audio")?.sender ??
+        pc.getSenders()[0];
+      const desired = !g || g.canSend(peerId) ? track : null;
+      if (sender && sender.track !== desired)
+        void sender.replaceTrack(desired).catch(() => {});
+      const el = audioElsRef.current.get(peerId);
+      if (el) el.muted = !!g && !g.canHear(peerId);
+    });
+  }, []);
+
+  const setGate = useCallback(
+    (g: VoiceGate | null) => {
+      const prev = gateRef.current;
+      gateRef.current = g;
+      applyGate();
+      if ((prev?.key ?? null) !== (g?.key ?? null)) setGateState(g);
+    },
+    [applyGate],
+  );
 
   // ---------- Âm lượng / đang nói ----------
   const addAnalyser = useCallback((id: string, stream: MediaStream) => {
@@ -148,8 +198,13 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         let sum = 0;
         for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
         const rms = Math.sqrt(sum / buf.length);
+        const g = gateRef.current;
+        const allowed =
+          !g || (uid === myUserId ? g.mic : g.canHear(uid));
         next[uid] =
-          rms > SPEAKING_THRESHOLD && !(uid === myUserId && mutedRef.current);
+          allowed &&
+          rms > SPEAKING_THRESHOLD &&
+          !(uid === myUserId && mutedRef.current);
       });
       setSpeaking((prev) => {
         const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
@@ -197,6 +252,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         ?.getTracks()
         .forEach((t) => pc.addTrack(t, localStreamRef.current!));
 
+      applyGate(peerId);
+
       pc.onicecandidate = (e) => {
         if (e.candidate)
           sendSignal(peerId, { type: "ice", candidate: e.candidate.toJSON() });
@@ -214,6 +271,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         }
         el.srcObject = stream;
         el.volume = volumeRef.current;
+        el.muted = !!gateRef.current && !gateRef.current.canHear(peerId);
         playAudio(el);
         addAnalyser(peerId, stream);
       };
@@ -236,7 +294,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       }
       return pc;
     },
-    [addAnalyser, closePeer, playAudio, sendSignal],
+    [addAnalyser, applyGate, closePeer, playAudio, sendSignal],
   );
 
   const flushIce = useCallback(async (peerId: string) => {
@@ -306,16 +364,11 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         });
         const track = stream.getAudioTracks()[0];
         track.enabled = !mutedRef.current;
-        await Promise.all(
-          Array.from(pcsRef.current.values()).map((pc) =>
-            pc
-              .getSenders()
-              .find((s) => s.track?.kind === "audio")
-              ?.replaceTrack(track),
-          ),
-        );
-        localStreamRef.current?.getTracks().forEach((t) => t.stop());
+        const old = localStreamRef.current;
         localStreamRef.current = stream;
+        // thay track cho những người được nghe mình (theo cổng lọc)
+        applyGate();
+        old?.getTracks().forEach((t) => t.stop());
         watchTrack(stream);
         if (myUserId) addAnalyser(myUserId, stream);
       } catch {
@@ -323,7 +376,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       }
     },
      
-    [myUserId, addAnalyser],
+    [myUserId, addAnalyser, applyGate],
   );
 
   const setVolume = useCallback((v: number) => {
@@ -544,6 +597,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         devices,
         deviceId,
         selectDevice,
+        gate,
+        setGate,
       }}
     >
       {children}

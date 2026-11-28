@@ -60,7 +60,7 @@ interface RoomContextType {
 const RoomContext = createContext<RoomContextType | null>(null);
 
 /** Các game dùng chung hệ thống phòng (mỗi game có tiền tố sự kiện socket riêng) */
-export type RoomGame = "monopoly" | "billiard" | "pool" | "caro" | "xiangqi" | "chess";
+export type RoomGame = "monopoly" | "billiard" | "pool" | "caro" | "xiangqi" | "chess" | "tienlen" | "sacmau" | "masoi" | "vedoan";
 const GAME_PREFIX: Record<RoomGame, string> = {
   monopoly: "mono",
   billiard: "bida",
@@ -68,6 +68,10 @@ const GAME_PREFIX: Record<RoomGame, string> = {
   caro: "caro",
   xiangqi: "xq",
   chess: "chess",
+  tienlen: "tl",
+  sacmau: "sm",
+  masoi: "ms",
+  vedoan: "vd",
 };
 const GAME_PATH: Record<RoomGame, string> = {
   monopoly: "/games/monopoly",
@@ -76,6 +80,10 @@ const GAME_PATH: Record<RoomGame, string> = {
   caro: "/games/caro",
   xiangqi: "/games/xiangqi",
   chess: "/games/chess",
+  tienlen: "/games/tienlen",
+  sacmau: "/games/sacmau",
+  masoi: "/games/masoi",
+  vedoan: "/games/vedoan",
 };
 
 export function RoomProvider({
